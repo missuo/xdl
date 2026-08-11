@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "XDL — Send to Downloader",
+  "version": "1.0",
+  "description": "Send the current X/Twitter profile to the XDL desktop app, which fetches and downloads all of its media.",
+  "action": {
+    "default_title": "Send this profile to XDL"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab"],
+  "host_permissions": ["http://127.0.0.1:47333/*"]
+}

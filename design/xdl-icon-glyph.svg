@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- XDL icon — glyph layer for Icon Composer (transparent background).
+       Icon Composer adds its own layer shadow; none baked in here. -->
+  <defs>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A4A52"/>
+      <stop offset="1" stop-color="#1F1F24"/>
+    </linearGradient>
+  </defs>
+  <path d="M 585 130 L 330 570 L 480 570 L 430 894 L 705 430 L 545 430 Z"
+        fill="url(#bolt)" stroke="url(#bolt)" stroke-width="36"
+        stroke-linejoin="round"/>
+</svg>

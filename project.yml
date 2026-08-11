@@ -1,0 +1,58 @@
+# XcodeGen project definition. The .xcodeproj is generated — run
+# `make generate` (or `xcodegen generate`) after changing this file.
+#
+# NOTE: Xcode never compiles Go. Run `make core` after any change under
+# core/ or you will ship a stale xdl-core binary.
+name: XDL
+
+options:
+  bundleIdPrefix: me.missuo
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # Version numbers live ONLY here; Info.plist uses the placeholders.
+    MARKETING_VERSION: 1.0.0
+    CURRENT_PROJECT_VERSION: 1
+    CLANG_ENABLE_OBJC_ARC: YES
+    GENERATE_INFOPLIST_FILE: NO
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_APP_SANDBOX: NO
+    CODE_SIGN_STYLE: Automatic
+  configs:
+    Debug:
+      GCC_PREPROCESSOR_DEFINITIONS: "DEBUG=1 $(inherited)"
+
+targets:
+  XDL:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/App
+      # Icon Composer bundle — requires the Xcode 26+ toolchain to compile
+      # (older Xcode copies it verbatim and ships a blank Dock tile silently).
+      - AppIcon.icon
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.missuo.XDL
+        INFOPLIST_FILE: Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Entitlements/XDL.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    postBuildScripts:
+      - name: Embed xdl-core
+        # Always runs (basedOnDependencyAnalysis: false): the Go binary is
+        # built outside Xcode's dependency graph.
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          CORE_SRC="${SRCROOT}/build/xdl-core"
+          if [ ! -f "${CORE_SRC}" ]; then
+            echo "error: ${CORE_SRC} not found — run 'make core' first" >&2
+            exit 1
+          fi
+          DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          mkdir -p "${DEST}"
+          cp "${CORE_SRC}" "${DEST}/xdl-core"
+          chmod +x "${DEST}/xdl-core"
