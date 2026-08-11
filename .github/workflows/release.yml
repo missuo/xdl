@@ -1,0 +1,113 @@
+name: Release
+
+# Push a tag like v1.0.0 to build, sign, notarize the macOS app and publish
+# it together with the (unsigned) Chrome extension in one GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Xcode 26+ is required: the Icon Composer AppIcon.icon compiles to a
+    # blank Dock tile on older toolchains, silently.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: core/go.sum
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Import signing certificate
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PW="$(uuidgen)"
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > cert.p12
+          security create-keychain -p "$KEYCHAIN_PW" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PW" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PW" build.keychain > /dev/null
+          rm -f cert.p12
+          SIGN_ID="$(security find-identity -v -p codesigning build.keychain \
+            | awk -F'"' '/Developer ID Application/ {print $2; exit}')"
+          if [ -z "$SIGN_ID" ]; then
+            echo "no Developer ID Application identity found" >&2
+            exit 1
+          fi
+          echo "SIGN_ID=$SIGN_ID" >> "$GITHUB_ENV"
+
+      - name: Build Go core
+        run: |
+          set -euo pipefail
+          make core
+          # Notarization requires hardened runtime + secure timestamp on
+          # every nested executable.
+          codesign -f --timestamp --options runtime -s "$SIGN_ID" build/xdl-core
+          codesign --verify --strict build/xdl-core
+
+      - name: Build and sign app
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          xcodegen generate
+          xcodebuild -project XDL.xcodeproj -scheme XDL -configuration Release \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$SIGN_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            "OTHER_CODE_SIGN_FLAGS=--timestamp" \
+            MARKETING_VERSION="$VERSION" \
+            build
+          APP=build/DerivedData/Build/Products/Release/XDL.app
+          codesign --verify --deep --strict "$APP"
+          codesign -dv "$APP" 2>&1 | grep -q "Authority=Developer ID Application" \
+            || { echo "app is not Developer ID signed" >&2; exit 1; }
+
+      - name: Notarize and staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          APP=build/DerivedData/Build/Products/Release/XDL.app
+          ditto -c -k --keepParent "$APP" notarize.zip
+          xcrun notarytool submit notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$APP"
+          spctl -a -t exec -vv "$APP"
+          ditto -c -k --keepParent "$APP" "XDL-$VERSION-macos.zip"
+
+      - name: Package Chrome extension
+        run: |
+          set -euo pipefail
+          (cd extension && zip -r "../xdl-chrome-extension-$VERSION.zip" chrome)
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            "XDL-$VERSION-macos.zip" \
+            "xdl-chrome-extension-$VERSION.zip" \
+            --title "XDL $GITHUB_REF_NAME" \
+            --generate-notes
