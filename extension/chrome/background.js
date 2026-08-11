@@ -44,7 +44,8 @@ function flashBadge(text, color) {
 chrome.action.onClicked.addListener(async (tab) => {
   const handle = usernameFromURL(tab?.url || "");
   if (!handle) {
-    flashBadge("?", "#FF9500"); // not on a profile page
+    flashBadge("?", "#FF9500");
+    chrome.action.setTitle({ title: "XDL: open an X profile page first" });
     return;
   }
   try {
@@ -55,10 +56,13 @@ chrome.action.onClicked.addListener(async (tab) => {
     });
     if (response.ok) {
       flashBadge("✓", "#34C759");
+      chrome.action.setTitle({ title: `XDL: queued @${handle}` });
     } else {
       flashBadge("!", "#FF3B30");
+      chrome.action.setTitle({ title: `XDL: rejected (HTTP ${response.status})` });
     }
   } catch {
-    flashBadge("✗", "#FF3B30"); // XDL app not running
+    flashBadge("✗", "#FF3B30");
+    chrome.action.setTitle({ title: "XDL: app is not running" });
   }
 });
