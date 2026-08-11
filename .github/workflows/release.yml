@@ -72,6 +72,7 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             "OTHER_CODE_SIGN_FLAGS=--timestamp" \
             MARKETING_VERSION="$VERSION" \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
             build
           APP=build/DerivedData/Build/Products/Release/XDL.app
           codesign --verify --deep --strict "$APP"
