@@ -32,7 +32,24 @@ agents.
   FFmpeg, ExifTool; Homebrew installs are used when present), auth token in
   the system keychain
 
-## Download
+## Install
+
+### Homebrew
+
+```sh
+# The app for macOS, with the `xdl` command
+brew install --cask owo-network/brew/xdl
+
+# Or the CLI alone, for macOS and Linux
+brew install owo-network/brew/xdl-cli
+brew services start xdl-cli   # optional: `xdl serve` in the background
+```
+
+Install one or the other: both put `xdl` on the `PATH`. For a plain
+`brew upgrade` to update XDL too, trust the tap once:
+`brew trust owo-network/brew`.
+
+### Download
 
 Every [release](https://github.com/missuo/xdl/releases/latest) has:
 
@@ -49,9 +66,9 @@ Every [release](https://github.com/missuo/xdl/releases/latest) has:
 
 ### The app
 
-Build it with `make app` (or run it with `make dev`), add your X
-`auth_token` cookie in Settings → General, and install xtractor in
-Settings → Dependencies.
+Install it (above, or build it with `make app`), add your X `auth_token`
+cookie in Settings → General, and install xtractor in Settings →
+Dependencies.
 
 ### The CLI
 
