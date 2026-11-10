@@ -177,6 +177,8 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
       - id: build
         uses: docker/build-push-action@v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -224,10 +226,15 @@ jobs:
     needs: [macos, cross, docker-manifest]
     runs-on: ubuntu-latest
     steps:
+      # Only the release files: not the digests, nor buildx's build records.
       - uses: actions/download-artifact@v7
         with:
+          name: macos
           path: dist
-          merge-multiple: true
+      - uses: actions/download-artifact@v7
+        with:
+          name: cross
+          path: dist
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
