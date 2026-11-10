@@ -1,8 +1,15 @@
 name: Release
 
-# Push a tag like v2.0.0 to build, sign and notarize the macOS app, build the
-# Windows app, the CLI for every platform and the Docker image, and publish
-# them in one GitHub Release.
+# Push a tag like v2.0.0 to publish one GitHub Release with:
+#   - the desktop app (GUI) for macOS (universal, signed and notarized),
+#     Windows (amd64, arm64: installer + portable exe) and Linux (amd64,
+#     arm64: .deb, tarball with install.sh)
+#   - the `xdl` CLI for macOS, Linux and Windows (amd64, arm64)
+#   - the Chrome extension
+#   - the Docker image (ghcr.io, linux/amd64 + linux/arm64)
+# MyGo needs no cgo, so everything but the macOS app cross-compiles on Linux;
+# the macOS app needs a Mac for its Icon Composer icon, signing and
+# notarization.
 on:
   push:
     tags: ["v*"]
@@ -11,15 +18,19 @@ permissions:
   contents: write
   packages: write
 
+env:
+  # The newest Go; go.mod sets the minimum.
+  GO_VERSION: stable
+
 jobs:
   macos:
-    # Xcode 26+ compiles the Icon Composer AppIcon.icon.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
 
       - name: Set the version
         run: |
@@ -72,47 +83,69 @@ jobs:
           xcrun stapler staple "$APP"
           spctl -a -t exec -vv "$APP"
           mkdir -p dist
-          cp "$DMG" "dist/XDL-$VERSION-macos.dmg"
-          ditto -c -k --keepParent "$APP" "dist/XDL-$VERSION-macos.zip"
+          cp "$DMG" "dist/XDL-$VERSION-macos-universal.dmg"
+          ditto -c -k --keepParent "$APP" "dist/XDL-$VERSION-macos-universal.zip"
 
       - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: dist/*
 
-  windows-cli-extension:
+  cross:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
       - name: Set the version
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$VERSION\"/" mygo.json
+
       - name: Test
         run: make test
-      - name: Windows app and installer
+
+      - name: Desktop app for Windows and Linux
         run: |
+          set -euo pipefail
           sudo apt-get update && sudo apt-get install -y nsis
-          go tool mygo build -platform windows/amd64
+          go tool mygo build -platform windows/amd64,windows/arm64,linux/amd64,linux/arm64
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            cp build/windows-$arch/*-setup-*.exe "dist/XDL-$VERSION-windows-$arch-setup.exe"
+            (cd build/windows-$arch && zip -qr "../../dist/XDL-$VERSION-windows-$arch-portable.zip" XDL.exe chrome)
+            cp build/linux-$arch/*.deb "dist/xdl_${VERSION}_linux_$arch.deb"
+            cp build/linux-$arch/*.tar.gz "dist/XDL-$VERSION-linux-$arch.tar.gz"
+          done
+
       - name: CLI for every platform
         run: |
+          set -euo pipefail
           for t in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
             os=${t%/*}; arch=${t#*/}; ext=""; [ "$os" = windows ] && ext=.exe
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
               -ldflags "-s -w -X github.com/missuo/xdl/internal/version.Version=$VERSION" \
-              -o "dist/xdl-$VERSION-$os-$arch$ext" ./cmd/xdl
+              -o "cli/xdl$ext" ./cmd/xdl
+            if [ "$os" = windows ]; then
+              (cd cli && zip -q "../dist/xdl-cli-$VERSION-$os-$arch.zip" "xdl$ext")
+            else
+              tar -C cli -czf "dist/xdl-cli-$VERSION-$os-$arch.tar.gz" xdl
+            fi
+            rm -f "cli/xdl$ext"
           done
-      - name: Collect
+
+      - name: Chrome extension
         run: |
-          cp build/windows-amd64/*-setup-*.exe "dist/XDL-$VERSION-windows-setup.exe"
-          (cd extension && zip -r "../dist/xdl-chrome-extension-$VERSION.zip" chrome)
+          sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$VERSION\"/" extension/chrome/manifest.json
+          (cd extension/chrome && zip -qr "../../dist/xdl-chrome-extension-$VERSION.zip" .)
+
       - uses: actions/upload-artifact@v7
         with:
-          name: windows-cli-extension
+          name: cross
           path: dist/*
 
   docker:
@@ -134,7 +167,7 @@ jobs:
             -t "$IMAGE:$VERSION" -t "$IMAGE:latest" --push .
 
   release:
-    needs: [macos, windows-cli-extension, docker]
+    needs: [macos, cross, docker]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v7
@@ -145,5 +178,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          (cd dist && sha256sum * > SHA256SUMS.txt)
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
             --title "XDL $GITHUB_REF_NAME" --generate-notes

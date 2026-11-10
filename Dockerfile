@@ -7,7 +7,7 @@
 #     -e XDL_AUTH_TOKEN=<x auth_token> -e XDL_API_TOKEN=<a secret> \
 #     -v xdl-data:/data -v "$PWD/downloads:/downloads" xdl
 
-FROM golang:1.27-bookworm AS build
+FROM golang:1.27-trixie AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -o /out/xdl ./cmd/xdl
 
 # xtractor is a glibc binary: Debian, not Alpine.
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates ffmpeg libimage-exiftool-perl \
  && rm -rf /var/lib/apt/lists/* \
