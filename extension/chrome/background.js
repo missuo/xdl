@@ -1,9 +1,24 @@
 // XDL browser extension. The toolbar button sends the X/Twitter profile in
-// the current tab to the XDL app (or `xdl serve`) on 127.0.0.1:47333, which
+// the current tab to XDL — the app on this computer, or `xdl serve` on a
+// server (set its address and API token in the extension's options) — which
 // fetches it and downloads what is new. Right-click the button or a profile
 // link to subscribe instead: XDL then checks the account every day.
 
-const BRIDGE = "http://127.0.0.1:47333";
+const DEFAULT_URL = "http://127.0.0.1:47333";
+
+// config is the XDL to talk to: {url, token}. The local app trusts the
+// extension without a token; a remote `xdl serve` needs its XDL_API_TOKEN.
+async function config() {
+  const { url, token } = await chrome.storage.local.get(["url", "token"]);
+  return { url: (url || DEFAULT_URL).replace(/\/+$/, ""), token: token || "" };
+}
+
+async function api(path, init = {}) {
+  const { url, token } = await config();
+  const headers = { ...(init.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(url + path, { ...init, headers });
+}
 
 const RESERVED = new Set([
   "home", "explore", "notifications", "messages", "search", "settings",
@@ -47,7 +62,7 @@ function badge(text, color, title, clearAfter = 2500) {
 }
 
 async function post(path, body) {
-  const response = await fetch(BRIDGE + path, {
+  const response = await api(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -65,7 +80,7 @@ async function follow(jobID, handle) {
     await new Promise((r) => setTimeout(r, 2000));
     let job;
     try {
-      const response = await fetch(`${BRIDGE}/api/v1/jobs/${jobID}`);
+      const response = await api(`/api/v1/jobs/${jobID}`);
       if (!response.ok) return;
       job = await response.json();
     } catch {
@@ -97,6 +112,10 @@ async function download(target) {
       else badge("!", "#FF3B30", `XDL: rejected (HTTP ${response.status})`);
       return;
     }
+    if (response.status === 401) {
+      badge("!", "#FF3B30", "XDL: the API token is missing or wrong — set it in the extension's options");
+      return;
+    }
     if (!response.ok) {
       badge("!", "#FF3B30", `XDL: ${data.error || "HTTP " + response.status}`);
       return;
@@ -104,7 +123,7 @@ async function download(target) {
     badge("↓", "#0A84FF", `XDL: queued @${target.handle}`, 0);
     follow(data.job.id, target.handle);
   } catch {
-    badge("✗", "#FF3B30", "XDL: the app is not running");
+    badge("✗", "#FF3B30", "XDL is not reachable — is the app (or xdl serve) running?");
   }
 }
 
@@ -119,7 +138,7 @@ async function subscribe(target) {
       badge("!", "#FF3B30", `XDL: ${data.error || "HTTP " + response.status}`);
     }
   } catch {
-    badge("✗", "#FF3B30", "XDL: the app is not running");
+    badge("✗", "#FF3B30", "XDL is not reachable — is the app (or xdl serve) running?");
   }
 }
 

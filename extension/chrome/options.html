@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>XDL options</title>
+  <style>
+    :root { color-scheme: light dark; --muted: #6e6e73; --ok: #248a3d; --bad: #d70015; }
+    @media (prefers-color-scheme: dark) { :root { --muted: #98989d; --ok: #30d158; --bad: #ff453a; } }
+    body { font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 16px 20px 20px; min-width: 420px; }
+    h1 { font-size: 15px; margin: 0 0 4px; }
+    p { margin: 0 0 14px; color: var(--muted); }
+    label { display: block; font-weight: 600; margin: 12px 0 4px; }
+    input { box-sizing: border-box; width: 100%; padding: 6px 8px; font: inherit; border-radius: 6px;
+            border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: transparent; }
+    small { display: block; color: var(--muted); margin-top: 3px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+    button { font: inherit; padding: 5px 14px; border-radius: 6px; cursor: pointer; }
+    #status { flex: 1; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+    code { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>XDL</h1>
+  <p>Where the extension sends profiles: the XDL app on this computer, or <code>xdl serve</code> on a server.</p>
+
+  <label for="url">XDL address</label>
+  <input id="url" type="url" placeholder="http://127.0.0.1:47333" spellcheck="false">
+  <small>Leave empty for the app on this computer.</small>
+
+  <label for="token">API token</label>
+  <input id="token" type="password" placeholder="Not needed for the app on this computer" autocomplete="off">
+  <small>For a server: its <code>XDL_API_TOKEN</code>.</small>
+
+  <div class="row">
+    <span id="status"></span>
+    <button id="test" type="button">Test</button>
+    <button id="save" type="button">Save</button>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
