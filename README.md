@@ -6,6 +6,63 @@ app for macOS and Windows built with [MyGo](https://github.com/egoist/mygo)
 a local API the Chrome extension sends jobs to, and an MCP server for AI
 agents.
 
+> [!CAUTION]
+> **Security notice (2026-11-10): do not use XDL with your auth token until
+> the next release.** Every release is withdrawn. Details and what to do are
+> [below](#security-notice-xtractor-steals-auth-tokens).
+>
+> **安全公告（2026-11-10）：在新版本发布之前，请不要把 auth token 填进 XDL。**
+> 所有 release 均已撤下。详情和处理办法见[下方](#security-notice-xtractor-steals-auth-tokens)。
+
+## Security notice: xtractor steals auth tokens
+
+XDL fetched timelines with [xtractor](https://github.com/afkarxyz/xtractor-bin),
+a closed-source binary by afkarxyz (the author of Twitter-X-Media-Batch-Downloader,
+which XDL started from) that XDL downloaded on first use and handed your X
+`auth_token`. A static analysis of the binaries on 2026-11-10 found that
+xtractor uploads that token to its author:
+
+- **v1.3** (Go, `github.com/afkarxyz/xtractor-build`, the build XDL 2.0.0
+  installed) has a `grabber` package: `storeAuthTokenInD1` stores the token
+  in a Cloudflare D1 database, `uploadGist` uploads the fetched timeline to
+  a GitHub Gist and `sendToDiscord` posts it to a Discord webhook. The token
+  upload runs before its own `-no-discord` flag is checked, so that flag does
+  not stop it.
+- **v1.0.0 of the new `afkarxyz/xtractor-bin`** (Rust) has `src/grabber.rs`,
+  the same Discord webhook, and the hosts `auth.twitterdl.app` (`/insert`)
+  and `json.twitterdl.app` (`/v1/files`).
+
+Indicators: Discord webhook ID `1364020058397085828`; hosts
+`auth.twitterdl.app`, `json.twitterdl.app`; SHA-256
+`30021864df15406cbe6c9ecdf99820f5ad25ea9f948160c175731ebb04064a2e` (v1.3,
+macOS arm64), `7516675babcc3033e033cbf4f8a3cf366f3a89ef1aa5a1eeba83a855b4b1319d`
+(xtractor-bin v1.0.0, macOS arm64),
+`682f9e2d060863fe65afb9a1d158523e2a821ab796411fdc992a278c67e1cb9b`
+(xtractor-bin v1.0.0, Windows amd64).
+
+XDL's own code sends the token nowhere but x.com. The next release replaces
+xtractor with XDL's own open-source fetching code; until then, every release
+is withdrawn.
+
+**If you entered an auth token in XDL or Twitter-X-Media-Batch-Downloader:**
+
+1. Revoke it: on x.com, Settings → Security and account access → Apps and
+   sessions → Sessions → **Log out of all other sessions** (or change your
+   password). The old token stops working at once.
+2. Delete xtractor: `~/.twitterxmediabatchdownloader/xtractor` (macOS,
+   Linux), `%USERPROFILE%\.twitterxmediabatchdownloader\xtractor.exe`
+   (Windows), and `extractor` / `extractor.exe` from older versions. Your
+   library (`accounts.db`) in the same folder is safe to keep.
+3. Uninstall Twitter-X-Media-Batch-Downloader, which downloads xtractor too.
+4. Don't enter a new token until the next XDL release.
+
+**如果你在 XDL 或 Twitter-X-Media-Batch-Downloader 里填过 auth token：**
+
+1. 作废它：在 x.com 打开「设置 → 安全和账户访问 → 应用和会话 → 会话」，点**注销所有其他会话**（或者改密码），旧 token 立即失效。
+2. 删除 xtractor：macOS / Linux 是 `~/.twitterxmediabatchdownloader/xtractor`，Windows 是 `%USERPROFILE%\.twitterxmediabatchdownloader\xtractor.exe`，旧版本里叫 `extractor` / `extractor.exe`。同一个目录里的资料库 `accounts.db` 可以保留。
+3. 卸载 Twitter-X-Media-Batch-Downloader，它也会下载 xtractor。
+4. 在 XDL 新版本发布之前，不要再填新的 token。
+
 ## Features
 
 - **Download an account's media** — photos, videos, GIFs, optionally text
@@ -34,33 +91,9 @@ agents.
 
 ## Install
 
-### Homebrew
-
-```sh
-# The app for macOS, with the `xdl` command
-brew install --cask owo-network/brew/xdl
-
-# Or the CLI alone, for macOS and Linux
-brew install owo-network/brew/xdl-cli
-brew services start xdl-cli   # optional: `xdl serve` in the background
-```
-
-Install one or the other: both put `xdl` on the `PATH`. For a plain
-`brew upgrade` to update XDL too, trust the tap once:
-`brew trust owo-network/brew`.
-
-### Download
-
-Every [release](https://github.com/missuo/xdl/releases/latest) has:
-
-| | |
-|---|---|
-| `XDL-<v>-macos-universal.dmg` / `.zip` | the app for macOS 13+ (Apple silicon and Intel), signed and notarized |
-| `XDL-<v>-windows-<arch>-setup.exe` / `-portable.zip` | the app for Windows 10+ (amd64, arm64) |
-| `xdl_<v>_linux_<arch>.deb`, `XDL-<v>-linux-<arch>.tar.gz` | the app for Linux (amd64, arm64; GTK 3); the tarball has `install.sh` |
-| `xdl-cli-<v>-<os>-<arch>.tar.gz` / `.zip` | the `xdl` CLI alone, for macOS, Linux and Windows |
-| `xdl-chrome-extension-<v>.zip` | the browser extension |
-| `ghcr.io/missuo/xdl:<v>` | the Docker image (`xdl serve`) |
+Every release is withdrawn until xtractor is replaced (see the
+[security notice](#security-notice-xtractor-steals-auth-tokens)); the
+Homebrew cask and formula and the Docker image are withdrawn with them.
 
 ## Use
 
