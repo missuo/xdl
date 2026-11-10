@@ -28,6 +28,19 @@ agents.
   FFmpeg, ExifTool; Homebrew installs are used when present), auth token in
   the system keychain
 
+## Download
+
+Every [release](https://github.com/missuo/XDL/releases/latest) has:
+
+| | |
+|---|---|
+| `XDL-<v>-macos-universal.dmg` / `.zip` | the app for macOS 13+ (Apple silicon and Intel), signed and notarized |
+| `XDL-<v>-windows-<arch>-setup.exe` / `-portable.zip` | the app for Windows 10+ (amd64, arm64) |
+| `xdl_<v>_linux_<arch>.deb`, `XDL-<v>-linux-<arch>.tar.gz` | the app for Linux (amd64, arm64; GTK 3); the tarball has `install.sh` |
+| `xdl-cli-<v>-<os>-<arch>.tar.gz` / `.zip` | the `xdl` CLI alone, for macOS, Linux and Windows |
+| `xdl-chrome-extension-<v>.zip` | the browser extension |
+| `ghcr.io/missuo/xdl:<v>` | the Docker image (`xdl serve`) |
+
 ## Use
 
 ### The app
@@ -77,9 +90,39 @@ XDL_API_URL=http://server:47333 XDL_API_TOKEN=change-me xdl sub add nasa 1d
 
 ### The Chrome extension
 
-Load `extension/chrome` unpacked (Settings → Integrations → Show Extension
-Folder). Its button sends the profile in the tab to XDL and shows the
-progress; right-click it to subscribe. See [extension/README.md](extension/README.md).
+The extension adds an XDL button to Chrome (and Edge, Brave, Arc, Vivaldi):
+on an X profile it sends the account to XDL, which downloads what is new,
+and the badge shows the progress. Right-click the button, or a link to a
+profile, to subscribe instead.
+
+**Install**
+
+1. Get the extension: unzip `xdl-chrome-extension-<version>.zip` from the
+   [latest release](https://github.com/missuo/XDL/releases/latest) into a
+   folder you keep, or use the copy inside the app (Settings → Integrations
+   → Show Extension Folder), or `extension/chrome` in this repository.
+2. Open `chrome://extensions` (`edge://extensions` in Edge).
+3. Turn on **Developer mode** (top right).
+4. Click **Load unpacked** and choose the folder holding `manifest.json`.
+5. Pin the XDL button: the puzzle-piece menu next to the address bar → the
+   pin beside XDL.
+
+Chrome keeps loading the extension from that folder: don't delete it. To
+update, replace the folder's files and click the reload arrow on XDL's card
+in `chrome://extensions`.
+
+**Connect it**
+
+- To the app on the same computer: nothing to do. The extension talks to
+  `http://127.0.0.1:47333`, which trusts browser extensions without a token.
+- To `xdl serve` on a server or in Docker: right-click the XDL button →
+  **Options**, enter the server's address (`http://nas.local:47333`) and its
+  API token (`XDL_API_TOKEN`), then **Save** — Chrome asks for permission to
+  reach that address — and **Test**.
+
+Badges: `↓` queued, a percentage while downloading, `✓` done, `★`
+subscribed, `?` not a profile page, `✗` XDL not reachable, `!` refused
+(hover the button for why). See also [extension/README.md](extension/README.md).
 
 ### AI agents (MCP)
 
