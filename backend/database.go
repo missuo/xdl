@@ -80,6 +80,7 @@ func GetDBPath() string {
 }
 
 func InitDB() error {
+	removeXtractor()
 	return ensureDB()
 }
 

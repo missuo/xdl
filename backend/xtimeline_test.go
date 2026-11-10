@@ -2,6 +2,8 @@ package backend
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -240,5 +242,30 @@ func TestOndemandScriptURL(t *testing.T) {
 	key, err := verificationKey(`<meta name="twitter-site-verification" content="AAEC"/>`)
 	if err != nil || key != "AAEC" {
 		t.Errorf("key = %q %v", key, err)
+	}
+}
+
+func TestRemoveXtractor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	dir := filepath.Dir(GetDBPath())
+	if !strings.HasPrefix(dir, home) {
+		t.Skipf("library directory %s is not under HOME", dir)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"xtractor", "extractor.sha256", "accounts.db"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	removeXtractor()
+	if _, err := os.Stat(filepath.Join(dir, "xtractor")); !os.IsNotExist(err) {
+		t.Error("xtractor is still there")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "accounts.db")); err != nil {
+		t.Error("the library was removed")
 	}
 }
