@@ -45,14 +45,24 @@ XDL's own code sends the token nowhere but x.com. Since 2.0.1, XDL no
 longer downloads or runs xtractor: it reads X with its own open-source code
 (`backend/x*.go`). 2.0.0 was withdrawn.
 
+The FFmpeg that XDL 2.2 and earlier installed (Settings → Dependencies, or
+`xdl deps install ffmpeg`) came from `spotbye/Dependencies`, whose builds
+afkarxyz uploaded. They were not analyzed; treat them as untrusted. Since
+2.3, XDL downloads no programs at all: it uses the FFmpeg and ExifTool your
+package manager installs, and deletes the FFmpeg older versions left in
+`~/.twitterxmediabatchdownloader/`. None of XDL's code comes from
+Twitter-X-Media-Batch-Downloader any more.
+
 **If you entered an auth token in XDL or Twitter-X-Media-Batch-Downloader:**
 
 1. Revoke it: on x.com, Settings → Security and account access → Apps and
    sessions → Sessions → **Log out of all other sessions** (or change your
    password). The old token stops working at once.
-2. Delete xtractor: `~/.twitterxmediabatchdownloader/xtractor` (macOS,
-   Linux), `%USERPROFILE%\.twitterxmediabatchdownloader\xtractor.exe`
-   (Windows), and `extractor` / `extractor.exe` from older versions. Your
+2. Delete xtractor and FFmpeg: `xtractor` and `ffmpeg` in
+   `~/.twitterxmediabatchdownloader/` (macOS, Linux), `xtractor.exe` and
+   `ffmpeg.exe` in `%USERPROFILE%\.twitterxmediabatchdownloader\` (Windows),
+   and `extractor` / `extractor.exe` from older versions (XDL 2.3 does it
+   when it starts). Your
    library (`accounts.db`) in the same folder is safe to keep.
 3. Uninstall Twitter-X-Media-Batch-Downloader and XDL 2.0.0 or earlier,
    which download xtractor too.
@@ -61,7 +71,7 @@ longer downloads or runs xtractor: it reads X with its own open-source code
 **如果你在 XDL 或 Twitter-X-Media-Batch-Downloader 里填过 auth token：**
 
 1. 作废它：在 x.com 打开「设置 → 安全和账户访问 → 应用和会话 → 会话」，点**注销所有其他会话**（或者改密码），旧 token 立即失效。
-2. 删除 xtractor：macOS / Linux 是 `~/.twitterxmediabatchdownloader/xtractor`，Windows 是 `%USERPROFILE%\.twitterxmediabatchdownloader\xtractor.exe`，旧版本里叫 `extractor` / `extractor.exe`。同一个目录里的资料库 `accounts.db` 可以保留。
+2. 删除 xtractor 和 FFmpeg：macOS / Linux 是 `~/.twitterxmediabatchdownloader/` 里的 `xtractor` 和 `ffmpeg`，Windows 是 `%USERPROFILE%\.twitterxmediabatchdownloader\` 里的 `xtractor.exe` 和 `ffmpeg.exe`，旧版本里叫 `extractor` / `extractor.exe`（XDL 2.3 启动时会自动删除）。XDL 2.2 及更早版本「安装 FFmpeg」下载的是 afkarxyz 上传的程序，同样不可信。同一个目录里的资料库 `accounts.db` 可以保留。
 3. 卸载 Twitter-X-Media-Batch-Downloader 和 XDL 2.0.0 及更早版本，它们也会下载 xtractor。
 4. 安装 XDL 2.0.1 或更新版本，再填入新的 token。
 
@@ -90,8 +100,8 @@ longer downloads or runs xtractor: it reads X with its own open-source code
 - **Its own X client** — XDL reads timelines from X's web API itself, in
   open-source Go (`backend/x*.go`): the auth token goes to x.com and
   nowhere else, and there is no binary to download
-- Library of fetched accounts (SQLite), optional FFmpeg and ExifTool
-  (Homebrew installs are used when present), auth token in the system
+- Library of fetched accounts (SQLite), optional FFmpeg and ExifTool from
+  your package manager (XDL downloads no programs), auth token in the system
   keychain
 
 ## Install
@@ -141,7 +151,10 @@ updates itself.
 
 Install it (above, or build it with `make app`), add your X `auth_token`
 cookie in Settings → General. FFmpeg (GIF conversion) and ExifTool
-(metadata) are optional, in Settings → Dependencies.
+(metadata) are optional: Settings → Dependencies shows whether they are
+installed and the command that installs them (`brew install ffmpeg
+exiftool`, `winget install Gyan.FFmpeg OliverBetz.ExifTool`,
+`sudo apt install ffmpeg libimage-exiftool-perl`).
 
 ### The CLI
 
@@ -264,10 +277,12 @@ make test
 Pushing a `v*` tag builds, signs and notarizes everything in GitHub Actions
 (`.github/workflows/release.yml`).
 
-Data stays where the original app kept it: the library, download history,
-subscriptions and tools in `~/.twitterxmediabatchdownloader/`, settings in
-`~/Library/Application Support/XDL/settings.json` (shared by the app, the
-CLI and the server; the Objective-C app's preferences are imported once).
+XDL keeps its data in one folder, shared by the app, the CLI and the
+server: `~/Library/Application Support/XDL` on macOS, `%APPDATA%\XDL` on
+Windows, `~/.config/XDL` on Linux — `library.db` (the library, the
+download history and the subscriptions), `settings.json` and `api.json`.
+A library of XDL 2.2 or earlier moves there from
+`~/.twitterxmediabatchdownloader/` the first time a newer XDL starts.
 
 ## Layout
 
@@ -285,13 +300,10 @@ extension/chrome  the browser extension
 
 ## Credits
 
-The extraction/download backend is derived from
-[Twitter-X-Media-Batch-Downloader](https://github.com/afkarxyz/Twitter-X-Media-Batch-Downloader)
-by afkarxyz (GPL-3.0). XDL no longer uses its companion xtractor binary
-(see the [security notice](#security-notice-xtractor-steals-auth-tokens));
-the X client in `backend/x*.go` is XDL's own, and its transaction ID
-signing follows the algorithm documented by the open-source
-XClientTransaction project. Icons from [IconMCP](https://iconmcp.com) (MIT).
+Built with [MyGo](https://github.com/egoist/mygo). The X client's
+transaction ID signing follows the algorithm documented by the
+open-source XClientTransaction project. Icons from
+[IconMCP](https://iconmcp.com) (MIT).
 
 ## License
 

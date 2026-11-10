@@ -8,7 +8,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/missuo/xdl/backend"
-	"github.com/missuo/xdl/internal/deps"
 	"github.com/missuo/xdl/internal/engine"
 	"github.com/missuo/xdl/internal/schedule"
 	"github.com/missuo/xdl/internal/server"
@@ -25,8 +24,8 @@ func testApp(t *testing.T) *App {
 		page:   pageDownload,
 		form:   downloadForm{label: "Media"},
 		states: map[string]engine.State{}, itemRow: -1, jobRow: -1, libRow: -1, subRow: -1,
-		subForm:   subscriptionForm{timeline: "Media", interval: "Every day"},
-		depStatus: map[string]deps.Status{}, depProgress: map[string]float64{}, depError: map[string]string{},
+		subForm: subscriptionForm{timeline: "Media", interval: "Every day"},
+		tools:   map[string]toolInfo{},
 		avatars: map[string]*ui.Bitmap{}, fetching: map[string]bool{},
 	}
 }

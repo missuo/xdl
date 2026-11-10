@@ -68,8 +68,8 @@ var settingsTabs = []string{"General", "Downloads", "Dependencies", "Integration
 func (a *App) settingsPage(c *ui.Context) {
 	pageHeader(c, "Settings", "Shared with the CLI and `xdl serve`: "+settings.Path(), nil)
 	a.historyDialog(c)
-	if ui.Segmented(c, &a.settingsTab, settingsTabs...).Label("Settings section").Changed() && a.settingsTab == 2 && !a.depChecked {
-		a.checkDeps()
+	if ui.Segmented(c, &a.settingsTab, settingsTabs...).Label("Settings section").Changed() && a.settingsTab == 2 && a.toolsChecked.IsZero() {
+		a.checkTools()
 	}
 	ui.Scroll(c).Grow(1).Basis(0).Gap(16).Padding(0, 4, 8, 0).Children(func() {
 		switch a.settingsTab {

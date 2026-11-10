@@ -25,8 +25,8 @@ const (
 // ErrNoAuthToken is the failure of a job that needs X and has no token.
 var ErrNoAuthToken = errors.New(errNoAuthTokenS)
 
-// savedTimeline is the JSON the library stores per account (the format of
-// the original app, which the Library and exports understand).
+// savedTimeline is the JSON the library stores per account, which the
+// Library page and exports read too.
 type savedTimeline struct {
 	AccountInfo backend.AccountInfo     `json:"account_info"`
 	TotalURLs   int                     `json:"total_urls"`
@@ -406,7 +406,7 @@ func (e *Engine) download(j *job, cfg settings.Settings, t *savedTimeline, outpu
 		e.mu.Unlock()
 		e.publish(Event{Type: EventJob, Job: &snap})
 	}
-	itemStatus := func(_ int64, index int, status, path string) {
+	itemStatus := func(index int, status, path string) {
 		if index < 0 || index >= len(todoIndex) {
 			return
 		}
@@ -448,8 +448,10 @@ func (e *Engine) download(j *job, cfg settings.Settings, t *savedTimeline, outpu
 		err                         error
 	)
 	if len(todo) > 0 {
-		downloaded, skipped, failed, err = backend.DownloadMediaWithMetadataProgressAndStatus(
-			todo, outputDir, r.Username, progress, itemStatus, j.ctx, options, cfg.Proxy)
+		var counts backend.DownloadCounts
+		counts, err = backend.DownloadItems(j.ctx, todo, outputDir, r.Username, options, cfg.Proxy,
+			backend.DownloadEvents{Progress: progress, Item: itemStatus})
+		downloaded, skipped, failed = counts.Downloaded, counts.Skipped, counts.Failed
 	}
 	e.mu.Lock()
 	done := records

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.3.0
+
+- **All of XDL is its own code now**: the downloads, the library and the
+  FFmpeg / ExifTool integration are rewritten, and nothing of
+  Twitter-X-Media-Batch-Downloader is left. File names and folders stay as
+  they were, so downloads made before are still found and skipped.
+- **No downloaded programs**: the FFmpeg that older versions installed came
+  from builds afkarxyz uploaded; XDL deletes it. FFmpeg and ExifTool now
+  come from your package manager (`brew install ffmpeg exiftool`, `winget
+  install Gyan.FFmpeg OliverBetz.ExifTool`, `apt install ffmpeg
+  libimage-exiftool-perl`); Settings → Dependencies shows the command.
+- **One data folder**: the library moves from `~/.twitterxmediabatchdownloader`
+  to XDL's folder (`~/Library/Application Support/XDL` on macOS), and the
+  auth token to the keychain entry "XDL", by themselves.
+- XDL 的全部代码现在都是自己写的：下载、资料库、FFmpeg / ExifTool 集成都已重写，不再包含 Twitter-X-Media-Batch-Downloader 的任何代码。文件名和目录结构保持不变，以前下载过的文件照样能识别、跳过。
+- 不再下载任何程序：旧版本安装的 FFmpeg 来自 afkarxyz 上传的构建，XDL 会把它删掉。FFmpeg 和 ExifTool 改用系统包管理器安装，「设置 → 依赖」里会显示安装命令。
+- 数据统一放到 XDL 自己的目录：资料库从 `~/.twitterxmediabatchdownloader` 自动搬到 XDL 的目录（macOS 上是 `~/Library/Application Support/XDL`），auth token 也自动迁移到钥匙串里名为「XDL」的条目。
+
 ## 2.2.0
 
 - **Automatic updates**: XDL checks for a new version in the background

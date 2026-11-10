@@ -137,9 +137,8 @@ func (s Settings) DownloadDir() string {
 	return backend.GetDefaultDownloadPath()
 }
 
-// Dir is XDL's own data directory (~/Library/Application Support/XDL on
-// macOS). The account library and dependencies stay where the original
-// app kept them (see package backend).
+// Dir is XDL's data directory (~/Library/Application Support/XDL on
+// macOS): the settings, the API details and the library (package backend).
 func Dir() string {
 	base, err := os.UserConfigDir()
 	if err != nil {

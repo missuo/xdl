@@ -18,7 +18,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/missuo/xdl/backend"
-	"github.com/missuo/xdl/internal/deps"
 	"github.com/missuo/xdl/internal/engine"
 	"github.com/missuo/xdl/internal/logbuf"
 	"github.com/missuo/xdl/internal/schedule"
@@ -98,11 +97,9 @@ type App struct {
 	confirmSub bool
 
 	// Dependencies (in Settings).
-	depStatus   map[string]deps.Status
-	depChecked  bool
-	depChecking bool
-	depProgress map[string]float64 // in flight: 0…1, or -1 when the size is unknown
-	depError    map[string]string
+	tools         map[string]toolInfo
+	toolsChecked  time.Time
+	toolsChecking bool
 
 	// Logs page.
 	logs   []string
@@ -129,22 +126,19 @@ func Run() error {
 
 	store := settings.Open()
 	a := &App{
-		eng:         engine.New(store),
-		store:       store,
-		page:        pageDownload,
-		form:        downloadForm{label: "Media"},
-		cfg:         store.Get(),
-		states:      map[string]engine.State{},
-		itemRow:     -1,
-		jobRow:      -1,
-		libRow:      -1,
-		subRow:      -1,
-		subForm:     subscriptionForm{timeline: "Media", interval: "Every day"},
-		depStatus:   map[string]deps.Status{},
-		depProgress: map[string]float64{},
-		depError:    map[string]string{},
-		avatars:     map[string]*ui.Bitmap{},
-		fetching:    map[string]bool{},
+		eng:      engine.New(store),
+		store:    store,
+		page:     pageDownload,
+		form:     downloadForm{label: "Media"},
+		cfg:      store.Get(),
+		states:   map[string]engine.State{},
+		itemRow:  -1,
+		jobRow:   -1,
+		libRow:   -1,
+		subRow:   -1,
+		subForm:  subscriptionForm{timeline: "Media", interval: "Every day"},
+		avatars:  map[string]*ui.Bitmap{},
+		fetching: map[string]bool{},
 	}
 	a.loadNumbers()
 

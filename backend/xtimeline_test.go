@@ -56,51 +56,56 @@ func TestParseTimelinePage(t *testing.T) {
 	if page.next != "NEXT" {
 		t.Errorf("next = %q", page.next)
 	}
-	if len(page.tweets) != 3 {
-		t.Fatalf("got %d tweets, want 3 (pinned, video, retweet; no tombstone or ad)", len(page.tweets))
+	if len(page.posts) != 3 {
+		t.Fatalf("got %d posts, want 3 (pinned, video, repost; no tombstone or ad)", len(page.posts))
 	}
-	pinned, video, rt := page.tweets[0], page.tweets[1], page.tweets[2]
+	pinned, video, rt := page.posts[0], page.posts[1], page.posts[2]
 
-	if pinned.TweetID != "1" || pinned.Author.Username != "alice" || pinned.Source != "Twitter Web App" ||
-		pinned.Stats.Views != 1234 || pinned.Stats.Likes != 5 || len(pinned.Hashtags) != 1 || !pinned.Author.BlueVerified {
+	if pinned.ID != "1" || pinned.Author.Handle != "alice" || pinned.Source != "Twitter Web App" ||
+		pinned.Views != 1234 || pinned.Likes != 5 || len(pinned.Hashtags) != 1 || !pinned.Author.Verified {
 		t.Errorf("pinned = %+v", pinned)
 	}
-	if pinned.URL != "https://x.com/alice/status/1" {
-		t.Errorf("url = %q", pinned.URL)
-	}
 	photo := pinned.Media[0]
-	if got := bestPhotoURL(photo, "orig"); got != "https://pbs.twimg.com/media/ABC?format=jpg&name=orig" {
+	if got := sizedImage(photo.Image, "orig"); got != "https://pbs.twimg.com/media/ABC?format=jpg&name=orig" {
 		t.Errorf("orig = %q", got)
 	}
-	if got := bestPhotoURL(photo, "small"); got != "https://pbs.twimg.com/media/ABC?format=jpg&name=small" {
-		t.Errorf("small = %q", got)
-	}
-	if got := previewURL(photo); got != "https://pbs.twimg.com/media/ABC?format=jpg&name=360x360" {
-		t.Errorf("preview = %q", got)
-	}
-
 	v := video.Media[0]
-	if video.TweetID != "2" || v.Type != "video" || v.DurationMS != 5000 {
+	if video.ID != "2" || v.Kind != "video" || v.DurationMS != 5000 {
 		t.Errorf("video = %+v", video)
 	}
-	if got := bestVideoURL(v, "highest"); got != "https://video.twimg.com/ext_tw_video/200/pu/vid/avc1/1280x720/l.mp4" {
+	if got := pickClip(v, "highest"); got != "https://video.twimg.com/ext_tw_video/200/pu/vid/avc1/1280x720/l.mp4" {
 		t.Errorf("highest = %q", got)
 	}
-	if got := bestVideoURL(v, "360"); !strings.Contains(got, "640x360") {
+	if got := pickClip(v, "360"); !strings.Contains(got, "640x360") {
 		t.Errorf("360p = %q", got)
 	}
-
-	if !rt.IsRepost || rt.TweetID != "5" || rt.Author.Username != "bob" || rt.RepostedBy == nil ||
-		rt.RepostedBy.Username != "alice" || rt.Text != "a long gif post" || rt.Media[0].Type != "animated_gif" {
-		t.Errorf("retweet = %+v", rt)
+	if got := pickClip(v, "lowest"); !strings.Contains(got, "640x360") {
+		t.Errorf("lowest = %q", got)
+	}
+	if rt.ID != "5" || rt.Author.Handle != "bob" || rt.RepostedBy == nil ||
+		rt.RepostedBy.Handle != "alice" || rt.Text != "a long gif post" || rt.Media[0].Kind != "animated_gif" {
+		t.Errorf("repost = %+v", rt)
 	}
 
-	entries := flattenTweets(page.tweets, FlattenOptions{IncludePhotos: true, IncludeVideos: true, IncludeGifs: true})
+	all := entryOptions{photos: true, videos: true, gifs: true, imageSize: "small"}
+	entries := timelineEntries(page.posts, all)
 	if len(entries) != 3 || entries[0].Extension != "jpg" || entries[1].Extension != "mp4" || !entries[2].IsRetweet {
-		t.Errorf("entries = %+v", entries)
+		t.Fatalf("entries = %+v", entries)
+	}
+	if e := entries[0]; e.URL != "https://pbs.twimg.com/media/ABC?format=jpg&name=small" ||
+		e.Thumbnail != "https://pbs.twimg.com/media/ABC?format=jpg&name=360x360" || e.TweetID != 1 ||
+		e.AuthorUsername != "alice" || e.FavoriteCount != 5 || e.Width != 2048 {
+		t.Errorf("photo entry = %+v", e)
 	}
 	if k := MediaKey(entries[1].URL, 2, "video"); k != "video:200" {
 		t.Errorf("history key = %q", k)
+	}
+	if n := len(timelineEntries(page.posts, entryOptions{videos: true})); n != 1 {
+		t.Errorf("videos only: %d entries", n)
+	}
+	text := []post{{ID: "7", Text: "hello"}, {ID: "8", Text: "  "}}
+	if es := timelineEntries(text, entryOptions{text: true}); len(es) != 1 || es[0].Type != "text" || es[0].Extension != "txt" {
+		t.Errorf("text entries = %+v", es)
 	}
 }
 
@@ -114,36 +119,39 @@ func TestParseTimelineErrors(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 	page, err := parseTimelinePage([]byte(`{"data":{"user":{"result":{"timeline_v2":{"timeline":{"instructions":[]}}}}}}`))
-	if err != nil || len(page.tweets) != 0 {
+	if err != nil || len(page.posts) != 0 {
 		t.Errorf("empty timeline: %v %v", page, err)
 	}
 }
 
-func TestRichAccount(t *testing.T) {
+func TestProfile(t *testing.T) {
 	u := &gqlUser{RestID: "42", IsBlueVerified: true}
 	u.Core.ScreenName, u.Core.Name, u.Core.CreatedAt = "alice", "Alice", "Mon Jan 01 00:00:00 +0000 2018"
 	u.Avatar.ImageURL = "https://pbs.twimg.com/profile_images/9/a_normal.jpg"
 	u.Legacy.ProfileBannerURL = "https://pbs.twimg.com/profile_banners/42/1"
 	u.Legacy.FollowersCount, u.Legacy.MediaCount = 10, 3
 	u.Privacy.Protected = true
-	acc := toRichAccount(u)
-	if acc.Username != "alice" || acc.Avatar != "https://pbs.twimg.com/profile_images/9/a.jpg" || !acc.Protected || acc.Followers != 10 {
-		t.Errorf("account = %+v", acc)
+	p := u.profile()
+	if p.Handle != "alice" || p.Avatar != "https://pbs.twimg.com/profile_images/9/a.jpg" || !p.Protected || p.Followers != 10 {
+		t.Errorf("profile = %+v", p)
 	}
-	if acc.AvatarVariants[0].URL != "https://pbs.twimg.com/profile_images/9/a_mini.jpg" {
-		t.Errorf("avatar variants = %+v", acc.AvatarVariants)
+	if p.AvatarSizes[0].URL != "https://pbs.twimg.com/profile_images/9/a_mini.jpg" {
+		t.Errorf("avatar sizes = %+v", p.AvatarSizes)
 	}
 	// The 2026 shape: counts and the profile out of legacy.
 	n := &gqlUser{RestID: "43"}
 	n.Core.ScreenName = "bob"
 	n.RelationshipCounts.Followers, n.TweetCounts.MediaTweets = 92, 7
 	n.ProfileBio.Description, n.Website.URL = "bio", "https://example.com"
-	if b := toRichAccount(n); b.Followers != 92 || b.MediaCount != 7 || b.Bio != "bio" || b.URL != "https://example.com" {
-		t.Errorf("2026 account = %+v", b)
+	if b := n.profile(); b.Followers != 92 || b.MediaCount != 7 || b.Bio != "bio" || b.URL != "https://example.com" {
+		t.Errorf("2026 profile = %+v", b)
 	}
-	info := buildAccountInfo(acc, "alice")
-	if info.Name != "alice" || info.Nick != "Alice" || info.Date != "Mon Jan 01 00:00:00 +0000 2018" {
+	info := p.info("alice")
+	if info.Name != "alice" || info.Nick != "Alice" || info.Date != "Mon Jan 01 00:00:00 +0000 2018" || !info.BlueVerified {
 		t.Errorf("info = %+v", info)
+	}
+	if info := (profile{}).info("carol"); info.Name != "carol" || info.Nick != "carol" {
+		t.Errorf("fallback info = %+v", info)
 	}
 }
 
@@ -249,21 +257,23 @@ func TestRemoveXtractor(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	dir := filepath.Dir(GetDBPath())
+	dir := legacyDir()
 	if !strings.HasPrefix(dir, home) {
-		t.Skipf("library directory %s is not under HOME", dir)
+		t.Skipf("the old library folder %s is not under HOME", dir)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"xtractor", "extractor.sha256", "accounts.db"} {
+	for _, name := range []string{"xtractor", "ffmpeg", "extractor.sha256", "accounts.db"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	removeXtractor()
-	if _, err := os.Stat(filepath.Join(dir, "xtractor")); !os.IsNotExist(err) {
-		t.Error("xtractor is still there")
+	for _, name := range []string{"xtractor", "ffmpeg"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s is still there", name)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, "accounts.db")); err != nil {
 		t.Error("the library was removed")

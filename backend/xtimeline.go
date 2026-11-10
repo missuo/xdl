@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -232,14 +231,14 @@ func (r *gqlTimelineResponse) instructions() []gqlInstruction {
 	return nil
 }
 
-// timelinePage is one page of a timeline: its tweets in order and the
-// cursor of the next.
-type timelinePage struct {
-	tweets []richTweet
-	next   string
+// parsedPage is one page as X sends it: its posts in order and the cursor
+// of the next.
+type parsedPage struct {
+	posts []post
+	next  string
 }
 
-func parseTimelinePage(body []byte) (*timelinePage, error) {
+func parseTimelinePage(body []byte) (*parsedPage, error) {
 	var resp gqlTimelineResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("X returned invalid JSON: %v", err)
@@ -248,7 +247,7 @@ func parseTimelinePage(body []byte) (*timelinePage, error) {
 	if instructions == nil && len(resp.Errors) > 0 {
 		return nil, classifyGraphQLErrors(resp.Errors)
 	}
-	page := &timelinePage{}
+	page := &parsedPage{}
 	add := func(id string, c *gqlItemContent) {
 		if c == nil || len(c.TweetResults.Result) == 0 || len(c.PromotedMetadata) > 0 && string(c.PromotedMetadata) != "null" {
 			return
@@ -258,10 +257,10 @@ func parseTimelinePage(body []byte) (*timelinePage, error) {
 		}
 		var t gqlTweet
 		if err := json.Unmarshal(c.TweetResults.Result, &t); err != nil {
-			return // a tweet in a shape XDL can't read is skipped, not fatal
+			return // a post in a shape XDL can't read is skipped, not fatal
 		}
-		if rt, ok := toRichTweet(&t); ok {
-			page.tweets = append(page.tweets, rt)
+		if p, ok := t.post(); ok {
+			page.posts = append(page.posts, p)
 		}
 	}
 	entry := func(e *gqlEntry) {
@@ -308,170 +307,124 @@ func classifyGraphQLErrors(errs []gqlError) error {
 
 var reHTMLTag = regexp.MustCompile(`<[^>]*>`)
 
-func toRichTweet(raw *gqlTweet) (richTweet, bool) {
+// post reads a post, or the original of a repost with RepostedBy set; ok
+// is false for a tombstone or a withheld post.
+func (raw *gqlTweet) post() (post, bool) {
 	t := raw.unwrap()
 	if t == nil || t.Legacy == nil {
-		return richTweet{}, false // a tombstone or a withheld tweet
+		return post{}, false
 	}
-	if rt := t.Legacy.RetweetedStatusResult.Result.unwrap(); rt != nil && rt.Legacy != nil {
-		out, ok := toRichTweet(rt)
+	if orig := t.Legacy.RetweetedStatusResult.Result.unwrap(); orig != nil && orig.Legacy != nil {
+		p, ok := orig.post()
 		if !ok {
-			return richTweet{}, false
+			return post{}, false
 		}
-		by := miniUser(t.Core.UserResults.Result)
-		out.IsRepost = true
-		out.RepostedBy = &by
-		return out, true
+		by := t.Core.UserResults.Result.person()
+		p.RepostedBy = &by
+		return p, true
 	}
 	l := t.Legacy
-	id := firstNonEmpty(l.IDStr, t.RestID)
-	author := miniUser(t.Core.UserResults.Result)
-	text := l.FullText
-	if note := t.NoteTweet.NoteTweetResults.Result.Text; note != "" {
-		text = note
-	}
-	views, _ := strconv.Atoi(t.Views.Count)
-	out := richTweet{
-		TweetID:   id,
-		URL:       "https://x.com/" + firstNonEmpty(author.Username, "i") + "/status/" + id,
-		Text:      text,
+	p := post{
+		ID:        firstNonEmpty(l.IDStr, t.RestID),
+		Text:      firstNonEmpty(t.NoteTweet.NoteTweetResults.Result.Text, l.FullText),
 		Lang:      l.Lang,
 		CreatedAt: l.CreatedAt,
 		Source:    html.UnescapeString(reHTMLTag.ReplaceAllString(t.Source, "")),
+		Author:    t.Core.UserResults.Result.person(),
+		Reply:     l.InReplyToStatusIDStr != "",
+		Quote:     l.IsQuoteStatus,
 		Sensitive: l.PossiblySensitive,
-		IsReply:   l.InReplyToStatusIDStr != "",
-		IsQuote:   l.IsQuoteStatus,
-		Author:    author,
-		Stats: richStats{
-			Likes:     l.FavoriteCount,
-			Retweets:  l.RetweetCount,
-			Replies:   l.ReplyCount,
-			Quotes:    l.QuoteCount,
-			Bookmarks: l.BookmarkCount,
-			Views:     views,
-		},
+		Likes:     l.FavoriteCount,
+		Reposts:   l.RetweetCount,
+		Replies:   l.ReplyCount,
+		Quotes:    l.QuoteCount,
+		Bookmarks: l.BookmarkCount,
 	}
+	p.Views, _ = strconv.Atoi(t.Views.Count)
 	for _, h := range l.Entities.Hashtags {
-		out.Hashtags = append(out.Hashtags, h.Text)
+		p.Hashtags = append(p.Hashtags, h.Text)
 	}
 	for _, m := range l.ExtendedEntities.Media {
-		out.Media = append(out.Media, toRichMedia(m))
+		p.Media = append(p.Media, m.attachment())
 	}
-	return out, true
+	return p, true
 }
 
-func miniUser(u *gqlUser) richMiniUser {
+func (u *gqlUser) person() person {
 	if u == nil {
-		return richMiniUser{}
+		return person{}
 	}
-	return richMiniUser{
-		UserID:       u.RestID,
-		Username:     u.screenName(),
-		Name:         u.name(),
-		Avatar:       u.avatar(),
-		Verified:     u.Verification.Verified || u.Legacy.Verified,
-		BlueVerified: u.IsBlueVerified,
+	return person{
+		ID:       u.RestID,
+		Handle:   u.screenName(),
+		Name:     u.name(),
+		Avatar:   u.avatar(),
+		Verified: u.Verification.Verified || u.Legacy.Verified || u.IsBlueVerified,
 	}
 }
 
 var reVideoResolution = regexp.MustCompile(`/(\d+x\d+)/`)
 
-// photoURL returns a pbs.twimg.com image at a named size:
-// .../media/ID.jpg becomes .../media/ID?format=jpg&name=<size>.
-func photoURL(mediaURL, size string) string {
-	u, err := url.Parse(mediaURL)
-	if err != nil || u.Host == "" {
-		return mediaURL
-	}
-	base, ext := u.Path, "jpg"
-	if i := strings.LastIndexByte(base, '.'); i > strings.LastIndexByte(base, '/') {
-		base, ext = base[:i], base[i+1:]
-	}
-	return u.Scheme + "://" + u.Host + base + "?format=" + ext + "&name=" + size
-}
-
-func toRichMedia(m gqlMedia) richMedia {
-	out := richMedia{
-		Type:        m.Type,
-		MediaID:     m.IDStr,
-		MediaKey:    m.MediaKey,
-		Thumbnail:   m.MediaURLHTTPS,
-		ExpandedURL: m.ExpandedURL,
-		Width:       m.OriginalInfo.Width,
-		Height:      m.OriginalInfo.Height,
-		AspectRatio: m.VideoInfo.AspectRatio,
-		DurationMS:  m.VideoInfo.DurationMillis,
-		AltText:     m.ExtAltText,
-		Sizes:       map[string]richSize{},
-	}
-	for name, s := range m.Sizes {
-		out.Sizes[name] = richSize{W: s.W, H: s.H, Resize: s.Resize, URL: photoURL(m.MediaURLHTTPS, name)}
-	}
-	for _, name := range []string{"360x360", "900x900", "4096x4096", "orig"} {
-		out.Thumbs = append(out.Thumbs, richThumb{Name: name, URL: photoURL(m.MediaURLHTTPS, name)})
+func (m gqlMedia) attachment() attachment {
+	a := attachment{
+		Kind:       m.Type,
+		ID:         m.IDStr,
+		Key:        m.MediaKey,
+		Image:      m.MediaURLHTTPS,
+		Width:      m.OriginalInfo.Width,
+		Height:     m.OriginalInfo.Height,
+		DurationMS: m.VideoInfo.DurationMillis,
+		AltText:    m.ExtAltText,
 	}
 	for _, v := range m.VideoInfo.Variants {
-		u := v.URL
-		if i := strings.Index(u, "?tag="); i >= 0 {
-			u = u[:i]
-		}
-		res := ""
+		u, _, _ := strings.Cut(v.URL, "?tag=")
+		c := clip{ContentType: v.ContentType, URL: u, Bitrate: v.Bitrate}
 		if r := reVideoResolution.FindStringSubmatch(u); r != nil {
-			res = r[1]
+			c.Resolution = r[1]
 		}
-		out.Variants = append(out.Variants, richVariant{ContentType: v.ContentType, URL: u, Bitrate: v.Bitrate, Resolution: res})
+		a.Clips = append(a.Clips, c)
 	}
-	return out
+	return a
 }
 
-func toRichAccount(u *gqlUser) richAccount {
-	acc := richAccount{
-		ID:           u.RestID,
-		Username:     u.screenName(),
-		Name:         u.name(),
-		Bio:          firstNonEmpty(u.ProfileBio.Description, u.Legacy.Description),
-		Avatar:       u.avatar(),
-		Banner:       firstNonEmpty(u.Banner.ImageURL, u.Legacy.ProfileBannerURL),
-		Location:     firstNonEmpty(u.Location.Location, u.Legacy.Location),
-		URL:          firstNonEmpty(u.Website.URL, u.Legacy.URL),
-		CreatedAt:    firstNonEmpty(u.Core.CreatedAt, u.Legacy.CreatedAt),
-		Followers:    max(u.RelationshipCounts.Followers, u.Legacy.FollowersCount),
-		Following:    max(u.RelationshipCounts.Following, u.Legacy.FriendsCount),
-		Tweets:       max(u.TweetCounts.Tweets, u.Legacy.StatusesCount),
-		MediaCount:   max(u.TweetCounts.MediaTweets, u.Legacy.MediaCount),
-		Protected:    u.Privacy.Protected || u.Legacy.Protected,
-		Verified:     u.Verification.Verified || u.Legacy.Verified,
-		BlueVerified: u.IsBlueVerified,
+func (u *gqlUser) profile() profile {
+	p := profile{
+		ID:         u.RestID,
+		Handle:     u.screenName(),
+		Name:       u.name(),
+		Bio:        firstNonEmpty(u.ProfileBio.Description, u.Legacy.Description),
+		Banner:     firstNonEmpty(u.Banner.ImageURL, u.Legacy.ProfileBannerURL),
+		Location:   firstNonEmpty(u.Location.Location, u.Legacy.Location),
+		URL:        firstNonEmpty(u.Website.URL, u.Legacy.URL),
+		CreatedAt:  firstNonEmpty(u.Core.CreatedAt, u.Legacy.CreatedAt),
+		Followers:  max(u.RelationshipCounts.Followers, u.Legacy.FollowersCount),
+		Following:  max(u.RelationshipCounts.Following, u.Legacy.FriendsCount),
+		Posts:      max(u.TweetCounts.Tweets, u.Legacy.StatusesCount),
+		MediaCount: max(u.TweetCounts.MediaTweets, u.Legacy.MediaCount),
+		Protected:  u.Privacy.Protected || u.Legacy.Protected,
+		Verified:   u.Verification.Verified || u.Legacy.Verified,
+		Blue:       u.IsBlueVerified,
 	}
 	if urls := u.Legacy.Entities.URL.URLs; u.Website.URL == "" && len(urls) > 0 && urls[0].ExpandedURL != "" {
-		acc.URL = urls[0].ExpandedURL
+		p.URL = urls[0].ExpandedURL
 	}
-	// Profile pictures come in fixed sizes: name_normal.jpg, name_400x400.jpg...
-	if acc.Avatar != "" {
-		original := strings.Replace(acc.Avatar, "_normal.", ".", 1)
-		acc.Avatar = original
-		if i := strings.LastIndexByte(original, '.'); i > strings.LastIndexByte(original, '/') {
+	// X serves profile pictures in fixed sizes: name_normal.jpg,
+	// name_400x400.jpg… and the original without a suffix.
+	if avatar := u.avatar(); avatar != "" {
+		p.Avatar = strings.Replace(avatar, "_normal.", ".", 1)
+		if dot := strings.LastIndexByte(p.Avatar, '.'); dot > strings.LastIndexByte(p.Avatar, '/') {
 			for _, size := range []string{"mini", "normal", "bigger", "200x200", "400x400"} {
-				acc.AvatarVariants = append(acc.AvatarVariants, richThumb{Name: size, URL: original[:i] + "_" + size + original[i:]})
+				p.AvatarSizes = append(p.AvatarSizes, ImageVariant{Name: size, URL: p.Avatar[:dot] + "_" + size + p.Avatar[dot:]})
 			}
 		}
-		acc.AvatarVariants = append(acc.AvatarVariants, richThumb{Name: "orig", URL: original})
+		p.AvatarSizes = append(p.AvatarSizes, ImageVariant{Name: "orig", URL: p.Avatar})
 	}
-	if acc.Banner != "" {
+	if p.Banner != "" {
 		for _, size := range []string{"300x100", "600x200", "1080x360", "1500x500"} {
-			acc.BannerVariants = append(acc.BannerVariants, richThumb{Name: size, URL: acc.Banner + "/" + size})
+			p.BannerSizes = append(p.BannerSizes, ImageVariant{Name: size, URL: p.Banner + "/" + size})
 		}
 	}
-	return acc
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
+	return p
 }
 
 // lookupUser resolves a handle, cached for xUserTTL.
@@ -557,7 +510,7 @@ func timelineQuery(kind, userID string, count int, cursor string) (string, map[s
 	return op, v
 }
 
-func (s *xSession) timelinePage(ctx context.Context, kind, userID string, count int, cursor string) (*timelinePage, error) {
+func (s *xSession) timelinePage(ctx context.Context, kind, userID string, count int, cursor string) (*parsedPage, error) {
 	op, vars := timelineQuery(kind, userID, count, cursor)
 	body, err := s.graphql(ctx, op, vars, xTimelineFeatures, map[string]bool{"withArticlePlainText": false})
 	if err != nil {
@@ -595,17 +548,15 @@ func decodeCombinedCursor(s string) combinedCursor {
 }
 
 // fetchTimeline reads one page (one per timeline for a combined one) and
-// keeps the tweets that belong to it.
-func fetchTimeline(ctx context.Context, s *xSession, req TimelineRequest, kind string) (*richResponse, error) {
+// keeps the posts that belong to it.
+func fetchTimeline(ctx context.Context, s *xSession, req TimelineRequest, kind string) (*timelinePage, error) {
 	count := req.BatchSize
 	if count <= 0 || count > 100 {
 		count = 100
 	}
-	if count < 20 {
-		count = 20
-	}
+	count = max(count, 20)
 
-	out := &richResponse{}
+	out := &timelinePage{}
 	var user *gqlUser
 	if kind != "bookmarks" {
 		handle := cleanUsername(req.Username)
@@ -617,81 +568,79 @@ func fetchTimeline(ctx context.Context, s *xSession, req TimelineRequest, kind s
 			return nil, err
 		}
 		user = u
-		out.Account = toRichAccount(u)
+		out.account = u.profile()
+	}
+	if kind == "media" && req.Retweets {
+		return fetchMediaWithRetweets(ctx, s, user, count, req.Cursor, out)
 	}
 
-	ownTweet := func(t richTweet) bool {
+	// A replies timeline carries the posts they answer; likes and
+	// bookmarks are other people's posts by nature.
+	byUser := func(p post) bool {
 		if user == nil || kind == "likes" {
 			return true
 		}
-		if t.IsRepost {
-			return t.RepostedBy != nil && (t.RepostedBy.UserID == user.RestID || strings.EqualFold(t.RepostedBy.Username, user.screenName()))
+		who := p.Author
+		if p.RepostedBy != nil {
+			who = *p.RepostedBy
 		}
-		return t.Author.UserID == user.RestID || strings.EqualFold(t.Author.Username, user.screenName())
+		return who.ID == user.RestID || strings.EqualFold(who.Handle, user.screenName())
 	}
-	keep := func(t richTweet) bool {
-		if !ownTweet(t) {
-			return false // the tweets a reply answers, in replies' conversations
-		}
-		if t.IsRepost && !req.Retweets && kind != "likes" && kind != "bookmarks" {
-			return false
-		}
-		return true
-	}
-
-	if kind == "media" && req.Retweets {
-		return fetchMediaWithRetweets(ctx, s, req, user, count, out)
-	}
-
 	userID := ""
 	if user != nil {
 		userID = user.RestID
 	}
-	page, err := s.timelinePage(ctx, kind, userID, count, req.Cursor)
+	pg, err := s.timelinePage(ctx, kind, userID, count, req.Cursor)
 	if err != nil {
 		return nil, err
 	}
-	for _, t := range page.tweets {
-		if keep(t) {
-			out.Tweets = append(out.Tweets, t)
+	for _, p := range pg.posts {
+		if !byUser(p) {
+			continue
 		}
+		if p.RepostedBy != nil && !req.Retweets && kind != "likes" && kind != "bookmarks" {
+			continue
+		}
+		out.posts = append(out.posts, p)
 	}
-	out.NextCursor = page.next
-	out.HasMore = page.next != "" && page.next != req.Cursor && len(page.tweets) > 0
-	if len(page.tweets) == 0 && req.Cursor == "" && user != nil && out.Account.Protected {
+	out.next = pg.next
+	out.more = pg.next != "" && pg.next != req.Cursor && len(pg.posts) > 0
+	if len(pg.posts) == 0 && req.Cursor == "" && user != nil && out.account.Protected {
 		return nil, fmt.Errorf("@%s's posts are protected: follow it with the account whose auth token XDL uses", user.screenName())
 	}
 	return out, nil
 }
 
-func fetchMediaWithRetweets(ctx context.Context, s *xSession, req TimelineRequest, user *gqlUser, count int, out *richResponse) (*richResponse, error) {
-	c := decodeCombinedCursor(req.Cursor)
+// fetchMediaWithRetweets reads the media tab, which leaves reposts out,
+// and the reposts with media of the posts tab, a page of each.
+func fetchMediaWithRetweets(ctx context.Context, s *xSession, user *gqlUser, count int, cursor string, out *timelinePage) (*timelinePage, error) {
+	c := decodeCombinedCursor(cursor)
 	next := c
 	if !c.MediaDone {
-		page, err := s.timelinePage(ctx, "media", user.RestID, count, c.Media)
+		pg, err := s.timelinePage(ctx, "media", user.RestID, count, c.Media)
 		if err != nil {
 			return nil, err
 		}
-		out.Tweets = append(out.Tweets, page.tweets...)
-		next.Media = page.next
-		next.MediaDone = page.next == "" || page.next == c.Media || len(page.tweets) == 0
+		out.posts = append(out.posts, pg.posts...)
+		next.Media = pg.next
+		next.MediaDone = pg.next == "" || pg.next == c.Media || len(pg.posts) == 0
 	}
 	if !c.TweetDone {
-		page, err := s.timelinePage(ctx, "tweets", user.RestID, count, c.Tweets)
+		pg, err := s.timelinePage(ctx, "tweets", user.RestID, count, c.Tweets)
 		if err != nil {
 			return nil, err
 		}
-		for _, t := range page.tweets {
-			if t.IsRepost && len(t.Media) > 0 && t.RepostedBy != nil && t.RepostedBy.UserID == user.RestID {
-				out.Tweets = append(out.Tweets, t)
+		for _, p := range pg.posts {
+			if p.RepostedBy != nil && p.RepostedBy.ID == user.RestID && len(p.Media) > 0 {
+				out.posts = append(out.posts, p)
 			}
 		}
-		next.Tweets = page.next
-		next.TweetDone = page.next == "" || page.next == c.Tweets || len(page.tweets) == 0
+		next.Tweets = pg.next
+		next.TweetDone = pg.next == "" || pg.next == c.Tweets || len(pg.posts) == 0
 	}
-	out.HasMore = !next.MediaDone || !next.TweetDone
-	if out.HasMore {
-		out.NextCursor = next.encode()
+	out.more = !next.MediaDone || !next.TweetDone
+	if out.more {
+		out.next = next.encode()
 	}
 	return out, nil
 }

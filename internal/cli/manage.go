@@ -13,12 +13,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"text/tabwriter"
-	"time"
 
 	"github.com/missuo/xdl/backend"
-	"github.com/missuo/xdl/internal/deps"
 	"github.com/missuo/xdl/internal/engine"
 	"github.com/missuo/xdl/internal/logbuf"
 	"github.com/missuo/xdl/internal/schedule"
@@ -237,6 +234,8 @@ func cmdConfig(args []string) error {
 	return fmt.Errorf("unknown config command %q (list, get, set, path, reset)", sub)
 }
 
+// cmdDeps reports the optional tools XDL uses. XDL installs none itself:
+// "install" prints the package manager's command.
 func cmdDeps(args []string) error {
 	sub := "status"
 	if len(args) > 0 {
@@ -244,82 +243,49 @@ func cmdDeps(args []string) error {
 	}
 	switch sub {
 	case "status", "ls":
-		type row struct {
-			dep deps.Dep
-			st  deps.Status
-		}
-		rows := make([]row, len(deps.All))
-		var wg sync.WaitGroup
-		for i, d := range deps.All {
-			wg.Go(func() { rows[i] = row{d, d.Status()} })
-		}
-		wg.Wait()
 		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(tw, "TOOL\tINSTALLED\tLATEST\tNOTE")
-		for _, r := range rows {
-			installed := "no"
-			if r.st.Installed {
-				installed = cmpOr(r.st.InstalledVersion, "yes")
+		fmt.Fprintln(tw, "TOOL\tINSTALLED\tPATH\tFOR")
+		for _, t := range backend.Tools {
+			installed, path := "no", t.Path()
+			if path != "" {
+				installed = cmpOr(t.Version(), "yes")
+			} else {
+				path = "install: " + t.InstallCommand()
 			}
-			note := r.dep.Description
-			if r.st.System {
-				note += " (system install)"
-			} else if r.st.Installed && !r.st.UpToDate() {
-				note += " — update available"
-			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", r.dep.Title, installed, cmpOr(r.st.LatestVersion, "?"), note)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", t.Title, installed, path, t.Purpose)
 		}
 		return tw.Flush()
 	case "install", "update":
-		if len(args) == 0 {
+		var list []*backend.Tool
+		for _, name := range args {
+			if name == "all" {
+				list = backend.Tools
+				break
+			}
+			found := false
+			for _, t := range backend.Tools {
+				if strings.EqualFold(t.Name, name) {
+					list, found = append(list, t), true
+				}
+			}
+			if !found {
+				return fmt.Errorf("no tool %q (ffmpeg, exiftool or all)", name)
+			}
+		}
+		if len(list) == 0 {
 			return errors.New("usage: xdl deps install <ffmpeg|exiftool|all>")
 		}
-		var list []deps.Dep
-		if args[0] == "all" {
-			list = deps.All
-		} else {
-			for _, name := range args {
-				d, err := deps.Find(name)
-				if err != nil {
-					return err
-				}
-				list = append(list, d)
+		fmt.Println("XDL downloads no programs; install them with your package manager:")
+		for _, t := range list {
+			state := "not installed"
+			if p := t.Path(); p != "" {
+				state = "installed at " + p
 			}
-		}
-		for _, d := range list {
-			if err := installDep(d); err != nil {
-				return fmt.Errorf("%s: %w", d.Title, err)
-			}
+			fmt.Printf("  %-9s %s (%s)\n", t.Title+":", t.InstallCommand(), state)
 		}
 		return nil
 	}
 	return fmt.Errorf("unknown deps command %q (status, install)", sub)
-}
-
-func installDep(d deps.Dep) error {
-	tty := isTerminal(os.Stdout)
-	fmt.Printf("Installing %s…\n", d.Title)
-	var last time.Time
-	err := d.Download(func(done, total int64) {
-		if !tty || (time.Since(last) < 100*time.Millisecond && done != total) {
-			return
-		}
-		last = time.Now()
-		if total > 0 {
-			pct := int(done * 100 / total)
-			fmt.Printf("\r\033[K  %s %d%% (%.1f / %.1f MB)", bar(pct, 24), pct, float64(done)/1e6, float64(total)/1e6)
-		} else {
-			fmt.Printf("\r\033[K  %.1f MB", float64(done)/1e6)
-		}
-	})
-	if tty {
-		fmt.Print("\r\033[K")
-	}
-	if err != nil {
-		return err
-	}
-	fmt.Printf("✓ %s installed\n", d.Title)
-	return nil
 }
 
 func cmpOr(s, def string) string {
