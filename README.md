@@ -7,12 +7,13 @@ a local API the Chrome extension sends jobs to, and an MCP server for AI
 agents.
 
 > [!CAUTION]
-> **Security notice (2026-11-10): do not use XDL with your auth token until
-> the next release.** Every release is withdrawn. Details and what to do are
-> [below](#security-notice-xtractor-steals-auth-tokens).
+> **Security notice (2026-11-10): XDL 2.0.0 and earlier ran xtractor, which
+> uploads your auth token to its author.** Update to 2.0.1 or later, which
+> reads X with its own open-source code, revoke the token you used, and
+> delete xtractor — [details and steps](#security-notice-xtractor-steals-auth-tokens).
 >
-> **安全公告（2026-11-10）：在新版本发布之前，请不要把 auth token 填进 XDL。**
-> 所有 release 均已撤下。详情和处理办法见[下方](#security-notice-xtractor-steals-auth-tokens)。
+> **安全公告（2026-11-10）：XDL 2.0.0 及更早版本使用的 xtractor 会把你的 auth token 上传给它的作者。**
+> 请升级到 2.0.1 或更新版本（改用 XDL 自己的开源代码读取 X），作废用过的 token，并删除 xtractor。[详情和处理步骤](#security-notice-xtractor-steals-auth-tokens)。
 
 ## Security notice: xtractor steals auth tokens
 
@@ -40,9 +41,9 @@ macOS arm64), `7516675babcc3033e033cbf4f8a3cf366f3a89ef1aa5a1eeba83a855b4b1319d`
 `682f9e2d060863fe65afb9a1d158523e2a821ab796411fdc992a278c67e1cb9b`
 (xtractor-bin v1.0.0, Windows amd64).
 
-XDL's own code sends the token nowhere but x.com. The next release replaces
-xtractor with XDL's own open-source fetching code; until then, every release
-is withdrawn.
+XDL's own code sends the token nowhere but x.com. Since 2.0.1, XDL no
+longer downloads or runs xtractor: it reads X with its own open-source code
+(`backend/x*.go`). 2.0.0 was withdrawn.
 
 **If you entered an auth token in XDL or Twitter-X-Media-Batch-Downloader:**
 
@@ -53,15 +54,16 @@ is withdrawn.
    Linux), `%USERPROFILE%\.twitterxmediabatchdownloader\xtractor.exe`
    (Windows), and `extractor` / `extractor.exe` from older versions. Your
    library (`accounts.db`) in the same folder is safe to keep.
-3. Uninstall Twitter-X-Media-Batch-Downloader, which downloads xtractor too.
-4. Don't enter a new token until the next XDL release.
+3. Uninstall Twitter-X-Media-Batch-Downloader and XDL 2.0.0 or earlier,
+   which download xtractor too.
+4. Install XDL 2.0.1 or later, and enter a new token there.
 
 **如果你在 XDL 或 Twitter-X-Media-Batch-Downloader 里填过 auth token：**
 
 1. 作废它：在 x.com 打开「设置 → 安全和账户访问 → 应用和会话 → 会话」，点**注销所有其他会话**（或者改密码），旧 token 立即失效。
 2. 删除 xtractor：macOS / Linux 是 `~/.twitterxmediabatchdownloader/xtractor`，Windows 是 `%USERPROFILE%\.twitterxmediabatchdownloader\xtractor.exe`，旧版本里叫 `extractor` / `extractor.exe`。同一个目录里的资料库 `accounts.db` 可以保留。
-3. 卸载 Twitter-X-Media-Batch-Downloader，它也会下载 xtractor。
-4. 在 XDL 新版本发布之前，不要再填新的 token。
+3. 卸载 Twitter-X-Media-Batch-Downloader 和 XDL 2.0.0 及更早版本，它们也会下载 xtractor。
+4. 安装 XDL 2.0.1 或更新版本，再填入新的 token。
 
 ## Features
 
@@ -94,9 +96,33 @@ is withdrawn.
 
 ## Install
 
-Every release is withdrawn until xtractor is replaced (see the
-[security notice](#security-notice-xtractor-steals-auth-tokens)); the
-Homebrew cask and formula and the Docker image are withdrawn with them.
+### Homebrew
+
+```sh
+# The app for macOS, with the `xdl` command
+brew install --cask owo-network/brew/xdl
+
+# Or the CLI alone, for macOS and Linux
+brew install owo-network/brew/xdl-cli
+brew services start xdl-cli   # optional: `xdl serve` in the background
+```
+
+Install one or the other: both put `xdl` on the `PATH`. For a plain
+`brew upgrade` to update XDL too, trust the tap once:
+`brew trust owo-network/brew`.
+
+### Download
+
+Every [release](https://github.com/missuo/xdl/releases/latest) has:
+
+| | |
+|---|---|
+| `XDL-<v>-macos-universal.dmg` / `.zip` | the app for macOS 13+ (Apple silicon and Intel), signed and notarized |
+| `XDL-<v>-windows-<arch>-setup.exe` / `-portable.zip` | the app for Windows 10+ (amd64, arm64) |
+| `xdl_<v>_linux_<arch>.deb`, `XDL-<v>-linux-<arch>.tar.gz` | the app for Linux (amd64, arm64; GTK 3); the tarball has `install.sh` |
+| `xdl-cli-<v>-<os>-<arch>.tar.gz` / `.zip` | the `xdl` CLI alone, for macOS, Linux and Windows |
+| `xdl-chrome-extension-<v>.zip` | the browser extension |
+| `ghcr.io/missuo/xdl:<v>` | the Docker image (`xdl serve`) |
 
 ## Use
 
