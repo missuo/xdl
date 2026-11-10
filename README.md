@@ -16,6 +16,10 @@ agents.
   and the download history skips every photo and video downloaded before by
   its X media ID, without a request, even after files were renamed, moved
   or deleted or the name templates changed (`-redownload` overrides it)
+- **Resumable downloads** — a dropped or stopped download continues
+  where it stopped (HTTP Range) instead of starting over; files of 50 MB and
+  more download in four segments at once; a transfer fails only after 60
+  seconds without data, so long videos on slow lines finish
 - **Subscriptions** — XDL checks accounts on a schedule (hourly to weekly)
   and downloads what they post; a check missed while XDL was off runs when
   it starts, a failed one again an hour later
