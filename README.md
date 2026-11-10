@@ -30,7 +30,7 @@ agents.
 
 ## Download
 
-Every [release](https://github.com/missuo/XDL/releases/latest) has:
+Every [release](https://github.com/missuo/xdl/releases/latest) has:
 
 | | |
 |---|---|
@@ -98,7 +98,7 @@ profile, to subscribe instead.
 **Install**
 
 1. Get the extension: unzip `xdl-chrome-extension-<version>.zip` from the
-   [latest release](https://github.com/missuo/XDL/releases/latest) into a
+   [latest release](https://github.com/missuo/xdl/releases/latest) into a
    folder you keep, or use the copy inside the app (Settings → Integrations
    → Show Extension Folder), or `extension/chrome` in this repository.
 2. Open `chrome://extensions` (`edge://extensions` in Edge).
