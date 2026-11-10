@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
+	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/missuo/xdl/backend"
@@ -183,6 +185,16 @@ func Run() error {
 		stop()
 		if a.tray != nil {
 			a.tray.Destroy()
+		}
+	})
+	// Updates as Sparkle offers them: a check in the background, then once
+	// a day, and a window with the release notes of a new version. Builds
+	// that cannot update themselves, as development builds, never check.
+	mygo.Use(native.New(updater.Options{Icon: appIcon}))
+	updatesOn = true
+	updater.OnChange(func() {
+		if a.win != nil {
+			a.win.Invalidate()
 		}
 	})
 	mygo.App.WhenReady(a.ready)

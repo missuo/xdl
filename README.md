@@ -119,10 +119,21 @@ Every [release](https://github.com/missuo/xdl/releases/latest) has:
 |---|---|
 | `XDL-<v>-macos-universal.dmg` / `.zip` | the app for macOS 13+ (Apple silicon and Intel), signed and notarized |
 | `XDL-<v>-windows-<arch>-setup.exe` / `-portable.zip` | the app for Windows 10+ (amd64, arm64) |
-| `xdl_<v>_linux_<arch>.deb`, `XDL-<v>-linux-<arch>.tar.gz` | the app for Linux (amd64, arm64; GTK 3); the tarball has `install.sh` |
+| `xdl_<v>_linux_<arch>.deb`, `xdl-<v>-linux-<arch>.tar.gz` | the app for Linux (amd64, arm64; GTK 3); `install.sh` installs the tarball in your home folder |
 | `xdl-cli-<v>-<os>-<arch>.tar.gz` / `.zip` | the `xdl` CLI alone, for macOS, Linux and Windows |
 | `xdl-chrome-extension-<v>.zip` | the browser extension |
 | `ghcr.io/missuo/xdl:<v>` | the Docker image (`xdl serve`) |
+| `xdl-<v>-<platform>.tar.gz`, `update-<platform>.json`, `*.delta` | the signed updates the apps install themselves |
+
+### Updates
+
+The app updates itself, as Sparkle does on the Mac: it checks in the
+background once a day, shows a new version's release notes and offers to
+install it (Settings → General, or "Check for Updates…" in the menu bar
+icon's menu, checks at once). Updates are signed with XDL's release key,
+and an update that key did not sign is refused. Copies a package manager
+installed, as the `.deb`, update with it instead; the Homebrew cask's app
+updates itself.
 
 ## Use
 

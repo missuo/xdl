@@ -8,10 +8,12 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/missuo/xdl/backend"
 	"github.com/missuo/xdl/internal/settings"
+	"github.com/missuo/xdl/internal/version"
 )
 
 func (a *App) loadToken() {
@@ -125,6 +127,7 @@ func (a *App) generalSettings(c *ui.Context) {
 			})
 		})
 	})
+	a.updateSettings(c)
 	card(c, "Notifications", func() {
 		ui.Form(c, func() {
 			ui.Field(c, "Notify when a job finishes", func() {
@@ -366,4 +369,54 @@ func extensionDir() string {
 		}
 	}
 	return ""
+}
+
+// updatesOn is set once the updater plugin is in use (not in tests).
+var updatesOn bool
+
+// updateSettings is the card of updates: the version, a check now, and
+// whether XDL checks, and installs, by itself.
+func (a *App) updateSettings(c *ui.Context) {
+	if !updatesOn {
+		return
+	}
+	t := c.Theme()
+	card(c, "Updates", func() {
+		ui.Form(c, func() {
+			ui.Field(c, "Version", func() {
+				ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, version.Version).FontSize(13).Bold()
+					if v := updater.AvailableVersion(); v != "" {
+						ui.Badge(c, v+" is available").Background(t.Accent.Alpha(0.15)).TextColor(t.Accent)
+					}
+					ui.Spacer(c)
+					if ui.Button(c, "Check for Updates…").Disabled(!mygo.Updater.Enabled()).Clicked() {
+						updater.CheckForUpdates()
+					}
+				})
+			}).Description(a.updateHint())
+			auto := updater.AutomaticChecks()
+			ui.Field(c, "Check automatically", func() {
+				if ui.Switch(c, &auto).Disabled(!mygo.Updater.Enabled()).Changed() {
+					updater.SetAutomaticChecks(auto)
+				}
+			}).Description("Once a day, and when XDL starts.")
+			install := updater.AutomaticDownloads()
+			ui.Field(c, "Install updates automatically", func() {
+				if ui.Switch(c, &install).Disabled(!mygo.Updater.Enabled() || !auto).Changed() {
+					updater.SetAutomaticDownloads(install)
+				}
+			}).Description("A new version downloads in the background and runs the next time XDL starts.")
+		})
+	})
+}
+
+func (a *App) updateHint() string {
+	if !mygo.Updater.Enabled() {
+		return "This copy of XDL cannot update itself (a development build, or one installed where it cannot write)."
+	}
+	if last := updater.LastCheck(); !last.IsZero() {
+		return "Last checked " + last.Local().Format("2006-01-02 15:04") + ". Updates are signed; XDL installs only what its release key signed."
+	}
+	return "Updates are signed; XDL installs only what its release key signed."
 }

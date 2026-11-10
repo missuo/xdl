@@ -7,9 +7,15 @@
   "main": "./cmd/xdl-app",
   "out": "build",
   "icon": "design/xdl-icon.png",
-  "resources": ["extension/chrome"],
+  "resources": [
+    "extension/chrome"
+  ],
   "macos": {
     "icon": "AppIcon.icon",
     "minimumSystemVersion": "13.0"
+  },
+  "updates": {
+    "publicKey": "yRCs5ObPLySDBdpgn5c5YkDpNdZmIW6sObjPmS7QiW8=",
+    "github": "missuo/xdl"
   }
 }

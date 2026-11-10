@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/missuo/xdl/backend"
@@ -69,6 +70,7 @@ func (a *App) updateTray() {
 			a.downloadClipboard()
 		}},
 		&mygo.MenuItem{Label: "Open XDL", Click: func(*mygo.MenuItem, *mygo.Window) { a.show() }},
+		updater.MenuItem(),
 		&mygo.MenuItem{Label: "Open Download Folder", Click: func(*mygo.MenuItem, *mygo.Window) {
 			a.openPath(a.downloadDir())
 		}},

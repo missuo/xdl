@@ -12,6 +12,11 @@ import (
 //go:embed icons/*.svg
 var iconFiles embed.FS
 
+// appIcon is the app's icon for the update window.
+//
+//go:embed appicon.png
+var appIcon []byte
+
 func icon(name string) *ui.SVG {
 	data, err := iconFiles.ReadFile("icons/" + name + ".svg")
 	if err != nil {

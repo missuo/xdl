@@ -1,6 +1,9 @@
 name: Release
 
 # Push a tag like v2.0.0 to publish one GitHub Release with:
+#   - the signed updates the apps install themselves (mygo.Updater): each
+#     platform's archive and update-<platform>.json manifest, signed with
+#     the MYGO_UPDATER_PRIVATE_KEY secret, and deltas from earlier versions
 #   - the desktop app (GUI) for macOS (universal, signed and notarized),
 #     Windows (amd64, arm64: installer + portable exe) and Linux (amd64,
 #     arm64: .deb, tarball with install.sh)
@@ -59,33 +62,42 @@ jobs:
           [ -n "$SIGN_ID" ] || { echo "no Developer ID Application identity found" >&2; exit 1; }
           echo "SIGN_ID=$SIGN_ID" >> "$GITHUB_ENV"
 
-      - name: Build and sign the app
-        run: |
-          set -euo pipefail
-          go tool mygo build -platform darwin/universal -sign "$SIGN_ID" -skip-notarize
-          APP="$(ls -d build/darwin-universal/*.app)"
-          codesign --verify --deep --strict "$APP"
-          # Authority lines only appear at verbosity 2+ (-dvv, not -dv).
-          codesign -dvv "$APP" 2>&1 | grep -q "Authority=Developer ID Application" \
-            || { echo "the app is not Developer ID signed" >&2; exit 1; }
-
-      - name: Notarize and staple
+      - name: Store the notary credentials
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          xcrun notarytool store-credentials notary --keychain "$HOME/Library/Keychains/build.keychain-db" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+
+      # mygo signs the app, notarizes its disk image, staples the ticket to
+      # both, and only then packs the update archive: updates ship the
+      # stapled app.
+      - name: Build, sign and notarize the app
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
           set -euo pipefail
-          APP="$(ls -d build/darwin-universal/*.app)"
-          DMG="$(ls build/darwin-universal/*.dmg)"
-          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple "$DMG"
-          xcrun stapler staple "$APP"
+          jq --arg id "$SIGN_ID" --arg kc "$HOME/Library/Keychains/build.keychain-db" \
+            '.macos.signingIdentity = $id | .macos.notarize = {keychainProfile: "notary", keychain: $kc}' \
+            mygo.json > mygo.json.new && mv mygo.json.new mygo.json
+          go tool mygo build -platform darwin/universal
+          OUT=build/darwin-universal
+          APP="$(ls -d $OUT/*.app)"
+          DMG="$(ls $OUT/*.dmg)"
+          codesign --verify --deep --strict "$APP"
+          # Authority lines only appear at verbosity 2+ (-dvv, not -dv).
+          codesign -dvv "$APP" 2>&1 | grep -q "Authority=Developer ID Application" \
+            || { echo "the app is not Developer ID signed" >&2; exit 1; }
+          xcrun stapler validate "$APP"
           spctl -a -t exec -vv "$APP"
+          ls "$OUT"/update-darwin-universal.json "$OUT"/xdl-$VERSION-darwin-universal.tar.gz
           mkdir -p dist
           cp "$DMG" "dist/XDL-$VERSION-macos-universal.dmg"
           ditto -c -k --keepParent "$APP" "dist/XDL-$VERSION-macos-universal.zip"
+          cp "$OUT"/update-*.json "$OUT"/xdl-$VERSION-*.tar.gz dist/
+          cp "$OUT"/*.delta dist/ 2>/dev/null || true
 
       - uses: actions/upload-artifact@v7
         with:
@@ -111,6 +123,8 @@ jobs:
         run: make test
 
       - name: Desktop app for Windows and Linux
+        env:
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           sudo apt-get update && sudo apt-get install -y nsis
@@ -120,8 +134,16 @@ jobs:
             cp build/windows-$arch/*-setup-*.exe "dist/XDL-$VERSION-windows-$arch-setup.exe"
             (cd build/windows-$arch && zip -qr "../../dist/XDL-$VERSION-windows-$arch-portable.zip" XDL.exe chrome)
             cp build/linux-$arch/*.deb "dist/xdl_${VERSION}_linux_$arch.deb"
-            cp build/linux-$arch/*.tar.gz "dist/XDL-$VERSION-linux-$arch.tar.gz"
+            # The update archives and manifests keep the names the
+            # manifests give them; the Linux archive is install.sh's too.
+            for os in windows linux; do
+              cp build/$os-$arch/update-*.json dist/
+              cp build/$os-$arch/xdl-$VERSION-$os-$arch.* dist/
+              cp build/$os-$arch/*.delta dist/ 2>/dev/null || true
+            done
           done
+          cp build/linux-amd64/install.sh dist/
+          cp build/windows-amd64/install.ps1 dist/ 2>/dev/null || true
 
       - name: CLI for every platform
         run: |
