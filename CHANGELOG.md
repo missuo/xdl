@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.1
+
+- **A menu bar icon in XDL's colors**: the logo's X, a falling bar and a
+  lightning bolt, in place of the download arrow. While a job runs, the
+  ring spins or fills with its progress around the bolt; a check shows
+  when it is done.
+- 菜单栏图标换成 XDL 的 logo：斜杠加闪电组成的 X，替代原来的下载箭头。有任务时，闪电外的圆环转圈或显示下载进度，完成后显示 ✓。
+
 ## 2.3.0
 
 - **All of XDL is its own code now**: the downloads, the library and the
