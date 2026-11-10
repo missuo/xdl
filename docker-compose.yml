@@ -1,0 +1,18 @@
+# docker compose up -d   — then e.g.
+#   XDL_API_URL=http://localhost:47333 XDL_API_TOKEN=change-me xdl sub add nasa 1d
+services:
+  xdl:
+    build: .
+    image: xdl
+    restart: unless-stopped
+    ports:
+      - "47333:47333"
+    environment:
+      XDL_AUTH_TOKEN: ${XDL_AUTH_TOKEN:?the auth_token cookie of x.com}
+      XDL_API_TOKEN: ${XDL_API_TOKEN:-change-me}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - xdl-data:/data
+      - ./downloads:/downloads
+volumes:
+  xdl-data:

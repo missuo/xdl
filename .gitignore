@@ -1,4 +1,5 @@
 .DS_Store
 build/
+.mygo/
 XDL.xcodeproj/
 *.xcresult

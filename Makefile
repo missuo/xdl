@@ -1,47 +1,49 @@
-# XDL build orchestration.
+# XDL build orchestration. Everything is Go: the desktop app is built with
+# MyGo (pure Go, no cgo), so any machine builds for every platform.
 #
-#   make core      — build the Go backend (universal binary) into build/xdl-core
-#   make generate  — regenerate XDL.xcodeproj from project.yml
-#   make dev       — core + generate + unsigned Debug build
-#   make run       — dev + launch the app
-#   make clean     — remove build products
+#   make app        — XDL.app + .dmg for this Mac in build/darwin-<arch>/
+#   make dev        — run the app with live reload
+#   make windows    — XDL.exe + installer in build/windows-amd64/
+#   make cli        — the `xdl` CLI for this machine in build/xdl
+#   make release    — tests, the app, and the CLI for macOS, Linux and Windows
+#   make docker     — the headless image (xdl serve)
+#   make test       — go vet (every platform) + go test
+#   make clean
 
-APP_NAME := XDL
-BUILD_DIR := build
-CORE_BIN := $(BUILD_DIR)/xdl-core
-DERIVED := $(BUILD_DIR)/DerivedData
-APP := $(DERIVED)/Build/Products/Debug/$(APP_NAME).app
-# Native UN notifications need a valid signing identity. Set SIGN_ID to your
-# "Developer ID Application: …" identity and build with `make dev SIGNED=1`.
-# Unsigned (ad-hoc) dev builds fall back to osascript notifications.
-SIGN_ID ?=
+VERSION ?= $(shell sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' mygo.json)
+LDFLAGS := -s -w -X github.com/missuo/xdl/internal/version.Version=$(VERSION)
+CLI_TARGETS := darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64
 
-.PHONY: core generate dev run clean
+.PHONY: app dev windows cli release docker test clean
 
-core:
-	mkdir -p $(BUILD_DIR)
-	cd core && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o ../$(BUILD_DIR)/xdl-core-arm64 ./cmd/xdl-core
-	cd core && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../$(BUILD_DIR)/xdl-core-amd64 ./cmd/xdl-core
-	lipo -create -output $(CORE_BIN) $(BUILD_DIR)/xdl-core-arm64 $(BUILD_DIR)/xdl-core-amd64
-	rm -f $(BUILD_DIR)/xdl-core-arm64 $(BUILD_DIR)/xdl-core-amd64
-	codesign -f -s - $(CORE_BIN)
-	@echo "core: $$(du -h $(CORE_BIN) | cut -f1) universal binary"
+app:
+	go tool mygo build
 
-generate:
-	xcodegen generate
+dev:
+	go tool mygo dev
 
-dev: core generate
-ifdef SIGNED
-	xcodebuild -project $(APP_NAME).xcodeproj -scheme $(APP_NAME) -configuration Debug \
-		-derivedDataPath $(DERIVED) \
-		CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$(SIGN_ID)" build
-else
-	xcodebuild -project $(APP_NAME).xcodeproj -scheme $(APP_NAME) -configuration Debug \
-		-derivedDataPath $(DERIVED) CODE_SIGNING_ALLOWED=NO build
-endif
+windows:
+	go tool mygo build -platform windows/amd64
 
-run: dev
-	open $(APP)
+cli:
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o build/xdl ./cmd/xdl
+
+release: test app
+	@for t in $(CLI_TARGETS); do \
+		os=$${t%/*}; arch=$${t#*/}; ext=""; [ $$os = windows ] && ext=.exe; \
+		out=build/cli/xdl-$(VERSION)-$$os-$$arch$$ext; \
+		echo "  $$out"; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/xdl || exit 1; \
+	done
+
+docker:
+	docker build --build-arg VERSION=$(VERSION) -t xdl:$(VERSION) -t xdl:latest .
+
+test:
+	go vet ./...
+	GOOS=windows go vet ./...
+	GOOS=linux go vet ./cmd/xdl ./internal/cli/... ./backend/...
+	go test ./...
 
 clean:
-	rm -rf $(BUILD_DIR) $(APP_NAME).xcodeproj
+	rm -rf build .mygo

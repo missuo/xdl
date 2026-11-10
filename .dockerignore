@@ -1,0 +1,7 @@
+build
+.mygo
+.git
+design
+AppIcon.icon
+XDL.xcodeproj
+*.dmg

@@ -1,0 +1,15 @@
+{
+  "name": "XDL",
+  "slug": "xdl",
+  "identifier": "me.missuo.XDL",
+  "version": "2.0.0",
+  "license": "GPL-3.0-only",
+  "main": "./cmd/xdl-app",
+  "out": "build",
+  "icon": "design/xdl-icon.png",
+  "resources": ["extension/chrome"],
+  "macos": {
+    "icon": "AppIcon.icon",
+    "minimumSystemVersion": "13.0"
+  }
+}
