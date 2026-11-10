@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -118,10 +117,6 @@ func fileExists(path string) (bool, error) {
 	return false, err
 }
 
-func cleanupIncompleteDownload(outputPath string) {
-	_ = os.Remove(outputPath)
-}
-
 func replaceFile(tempPath, outputPath string, allowOverwrite bool) error {
 	if !allowOverwrite {
 		return os.Rename(tempPath, outputPath)
@@ -197,48 +192,39 @@ func waitForRetry(ctx context.Context, attempt int) error {
 	}
 }
 
+// downloadFileWithRetry downloads a file, each retry continuing where
+// the last try stopped. A stop keeps the partial download, which the next
+// run continues; a file that fails every try loses it when the options say
+// to delete incomplete files.
 func downloadFileWithRetry(ctx context.Context, client *http.Client, mediaURL, outputPath string, options DownloadOptions) error {
 	options = NormalizeDownloadOptions(options)
 
 	var lastErr error
 	totalAttempts := options.RetryAttempts + 1
 	for attempt := 1; attempt <= totalAttempts; attempt++ {
-		keepPartialOnFailure := !options.DeleteIncompleteFiles && attempt == totalAttempts
-		lastErr = downloadFileWithContext(ctx, client, mediaURL, outputPath, !options.SkipExistingFiles, keepPartialOnFailure)
+		lastErr = downloadFileWithContext(ctx, client, mediaURL, outputPath, !options.SkipExistingFiles)
 		if lastErr == nil {
 			return nil
 		}
 		if ctx.Err() != nil || errors.Is(lastErr, context.Canceled) {
-			if options.DeleteIncompleteFiles {
-				cleanupIncompleteDownload(outputPath)
-			}
 			return lastErr
-		}
-		if options.DeleteIncompleteFiles {
-			cleanupIncompleteDownload(outputPath)
 		}
 		if attempt < totalAttempts {
 			if err := waitForRetry(ctx, attempt); err != nil {
-				if options.DeleteIncompleteFiles {
-					cleanupIncompleteDownload(outputPath)
-				}
 				return err
 			}
 		}
 	}
-
+	if options.DeleteIncompleteFiles {
+		removeParts(outputPath)
+	}
 	return lastErr
 }
 
 func writeTextFileWithOptions(outputPath string, content string, options DownloadOptions) error {
 	keepPartialOnFailure := !options.DeleteIncompleteFiles
-	if err := writeFileAtomically(outputPath, []byte(content), !options.SkipExistingFiles, keepPartialOnFailure); err != nil {
-		if options.DeleteIncompleteFiles {
-			cleanupIncompleteDownload(outputPath)
-		}
-		return err
-	}
-	return nil
+	// Atomic: a failure leaves no half-written file behind.
+	return writeFileAtomically(outputPath, []byte(content), !options.SkipExistingFiles, keepPartialOnFailure)
 }
 
 type ProgressCallback func(current, total int)
@@ -573,57 +559,19 @@ func normalizeGIFResolution(resolution string) string {
 	}
 }
 
-func downloadFileWithContext(ctx context.Context, client *http.Client, url, outputPath string, allowOverwrite bool, keepPartialOnFailure bool) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
+// downloadFileWithContext downloads url to outputPath through the
+// resumable engine (resumable.go): the file appears whole or not at all.
+func downloadFileWithContext(ctx context.Context, client *http.Client, url, outputPath string, allowOverwrite bool) error {
+	if err := ensureDir(outputPath); err != nil {
 		return err
 	}
-
-	resp, err := client.Do(req)
-	if err != nil {
+	if err := fetchToPart(ctx, client, url, outputPath); err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
-	}
-
-	out, err := os.CreateTemp(filepath.Dir(outputPath), filepath.Base(outputPath)+".*.part")
-	if err != nil {
-		return err
-	}
-	tempPath := out.Name()
-	cleanupTemp := !keepPartialOnFailure
-	defer func() {
-		if out != nil {
-			_ = out.Close()
-		}
-		if cleanupTemp {
-			_ = os.Remove(tempPath)
-		}
-	}()
-
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return err
-	}
-
-	if err := out.Close(); err != nil {
-		return err
-	}
-	out = nil
-
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-
-	if err := replaceFile(tempPath, outputPath, allowOverwrite); err != nil {
-		return err
-	}
-
-	cleanupTemp = false
-	return nil
+	return replaceFile(partPath(outputPath), outputPath, allowOverwrite)
 }
 
 func formatTimestamp(dateStr string) string {
