@@ -35,6 +35,9 @@ func (t *TweetIDString) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("tweet_id must be number or string")
 }
 
+// ImageVariant is one size of a profile picture or banner.
+type ImageVariant = richThumb
+
 type richThumb struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`

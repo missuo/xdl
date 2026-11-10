@@ -108,6 +108,10 @@ type App struct {
 
 	avatars  map[string]*ui.Bitmap
 	fetching map[string]bool
+
+	// Profile page.
+	prof   profileState
+	images *imageLoader
 }
 
 // Run starts the desktop app and returns when it quits.
@@ -198,6 +202,7 @@ func (a *App) ready() {
 		TitleBarStyle: mygo.TitleBarHidden,
 		Content:       ui.View(a.view),
 	})
+	a.images = newImageLoader(a.win, func() string { return a.store.Get().Proxy })
 	a.win.OnClose(func(e *mygo.CloseEvent) {
 		if !a.quitting {
 			e.PreventDefault()

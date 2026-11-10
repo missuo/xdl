@@ -119,7 +119,7 @@ func (a *App) libraryPage(c *ui.Context) {
 			}
 		}).Grow(1).Basis(0)
 		if table.Submitted() && sel != nil {
-			a.libraryJob(*sel, engine.ModeDownload, false)
+			a.openProfile(sel.Username, sel.MediaType)
 		}
 		table.ContextMenu(func(m *ui.Menu) {
 			if sel == nil {
@@ -143,7 +143,11 @@ func (a *App) libraryPage(c *ui.Context) {
 func (a *App) libraryActions(c *ui.Context, sel *backend.AccountListItem) {
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Shrink(0).Wrap().Children(func() {
 		none := sel == nil
-		if ui.PrimaryButton(c, "Update & Download").Disabled(none).
+		if iconButton(c, ui.PrimaryButton(c, ""), iconEye, "Open").Disabled(none).
+			Tooltip("Show the profile and its media (or double-click the account)").Clicked() {
+			a.openProfile(sel.Username, sel.MediaType)
+		}
+		if ui.Button(c, "Update & Download").Disabled(none).
 			Tooltip("Fetch what is new, then download everything missing").Clicked() {
 			a.libraryJob(*sel, engine.ModeDownload, false)
 		}
@@ -168,6 +172,10 @@ func (a *App) libraryActions(c *ui.Context, sel *backend.AccountListItem) {
 }
 
 func (a *App) libraryMenu(c *ui.Context, m *ui.Menu, acc backend.AccountListItem) {
+	if m.Item("Open").Chosen() {
+		a.openProfile(acc.Username, acc.MediaType)
+	}
+	m.Separator()
 	if m.Item("Update & Download").Chosen() {
 		a.libraryJob(acc, engine.ModeDownload, false)
 	}

@@ -67,6 +67,9 @@ type Request struct {
 	IncludeGifs   *bool  `json:"include_gifs,omitempty"`
 	IncludeText   *bool  `json:"include_text,omitempty"`
 	Retweets      *bool  `json:"retweets,omitempty"`
+	// Only downloads these media URLs of the library's copy, as a profile
+	// page's "download this"; it implies ModeLibrary.
+	Only []string `json:"only,omitempty"`
 }
 
 var handlePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,15}$`)
@@ -104,6 +107,9 @@ func (r *Request) Validate() error {
 	}
 	if !known {
 		return fmt.Errorf("unknown timeline type %q (one of %s)", r.TimelineType, strings.Join(TimelineTypes, ", "))
+	}
+	if len(r.Only) > 0 {
+		r.Mode = ModeLibrary
 	}
 	switch r.Mode {
 	case "":

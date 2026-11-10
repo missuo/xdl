@@ -107,6 +107,22 @@ func (e *Engine) pipeline(j *job) error {
 		if err != nil {
 			return err
 		}
+		if len(r.Only) > 0 {
+			only := make(map[string]bool, len(r.Only))
+			for _, u := range r.Only {
+				only[u] = true
+			}
+			kept := saved.Timeline[:0:0]
+			for _, entry := range saved.Timeline {
+				if only[entry.URL] {
+					kept = append(kept, entry)
+				}
+			}
+			if len(kept) == 0 {
+				return errors.New("none of those items is in the library's copy")
+			}
+			saved.Timeline = kept
+		}
 		e.setTimeline(j, saved, 0, !saved.Completed)
 	} else {
 		var err error
@@ -489,6 +505,20 @@ func accountOf(a backend.AccountInfo, username string) *Account {
 }
 
 // SavedItems returns the timeline the library holds for an account.
+// SavedProfile returns the library's copy of a timeline with the whole
+// account profile, for the app's profile page.
+func SavedProfile(username, timelineType string) ([]backend.TimelineEntry, backend.AccountInfo, bool, error) {
+	acc, err := backend.GetAccountByUsernameAndMediaType(username, timelineType)
+	if err != nil {
+		return nil, backend.AccountInfo{}, false, err
+	}
+	t, err := parseSaved(acc.ResponseJSON)
+	if err != nil {
+		return nil, backend.AccountInfo{}, false, err
+	}
+	return t.Timeline, t.AccountInfo, t.Completed, nil
+}
+
 func SavedItems(username, timelineType string) ([]backend.TimelineEntry, *Account, error) {
 	acc, err := backend.GetAccountByUsernameAndMediaType(username, timelineType)
 	if err != nil {

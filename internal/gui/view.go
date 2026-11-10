@@ -30,6 +30,8 @@ func (a *App) view(c *ui.Context) {
 					a.queuePage(c)
 				case pageLibrary:
 					a.libraryPage(c)
+				case pageProfile:
+					a.profilePage(c)
 				case pageSettings:
 					a.settingsPage(c)
 				case pageSubs:

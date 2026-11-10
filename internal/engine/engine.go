@@ -146,7 +146,7 @@ func (e *Engine) Submit(req Request) (Job, error) {
 	}
 	e.mu.Lock()
 	for _, j := range e.jobs {
-		if !j.State.Finished() && strings.EqualFold(j.Username, req.Username) &&
+		if len(req.Only) == 0 && len(j.req.Only) == 0 && !j.State.Finished() && strings.EqualFold(j.Username, req.Username) &&
 			j.TimelineType == req.TimelineType && j.Mode == req.Mode {
 			snap := j.Job
 			e.mu.Unlock()
