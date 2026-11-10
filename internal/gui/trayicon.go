@@ -16,10 +16,11 @@ import (
 	"github.com/missuo/xdl/internal/engine"
 )
 
-// The menu bar (and notification area) icon. Idle, it is IconMCP's
-// arrow-circle-down; while a job fetches, an arc spins around the arrow;
-// while it downloads, the ring fills clockwise with its progress; when it
-// finishes, a check shows for a moment before the idle icon returns. macOS
+// The menu bar (and notification area) icon. Idle, it is the logo's X: a
+// falling bar and a lightning bolt; while a job fetches, an arc spins
+// around the bolt; while it downloads, the ring fills clockwise with its
+// progress; when it finishes, a check shows for a moment before the idle
+// icon returns. macOS
 // tints the black template image itself; elsewhere the icon is white on dark
 // task bars and black on light ones.
 
@@ -33,7 +34,8 @@ const (
 )
 
 var (
-	trayIdleSVG = icon("arrow-circle-down")
+	trayIdleSVG = icon("xdl-tray")
+	trayBoltSVG = icon("xdl-bolt")
 	trayDoneSVG = icon("circle-check")
 )
 
@@ -70,7 +72,7 @@ func trayIcon(look trayLook, frame int, dark bool) []byte {
 	return b.Bytes()
 }
 
-// drawRing draws the arrow inside a ring: a faint track under a solid arc,
+// drawRing draws the bolt inside a ring: a faint track under a solid arc,
 // the download's share of it or the spinner's quarter.
 func drawRing(look trayLook, frame int, ink color.Color) image.Image {
 	const (
@@ -90,18 +92,28 @@ func drawRing(look trayLook, frame int, ink color.Color) image.Image {
 		start := float64(frame%spinSteps) / spinSteps * 2 * math.Pi
 		arc(solid, c, c, outer, outer-width, start, math.Pi/2)
 	}
-	arrowShape(solid, c, c)
-
 	bounds := image.Rect(0, 0, traySize, traySize)
 	trackMask := image.NewAlpha(bounds)
 	track.Draw(trackMask, bounds, image.Opaque, image.Point{})
 	solidMask := image.NewAlpha(bounds)
 	solid.Draw(solidMask, bounds, image.Opaque, image.Point{})
 
+	// The logo's bolt inside the ring: the whole X is too fine at this size.
+	const glyph = 20
+	mark := image.NewAlpha(bounds)
+	small := trayBoltSVG.Image(glyph, glyph, color.Black)
+	off := (traySize - glyph) / 2
+	for y := range glyph {
+		for x := range glyph {
+			_, _, _, a := small.At(small.Bounds().Min.X+x, small.Bounds().Min.Y+y).RGBA()
+			mark.SetAlpha(off+x, off+y, color.Alpha{A: uint8(a >> 8)})
+		}
+	}
+
 	r, g, b, _ := ink.RGBA()
 	out := image.NewNRGBA(bounds)
 	for i := range solidMask.Pix {
-		a := max(uint16(trackMask.Pix[i])*35/100, uint16(solidMask.Pix[i]))
+		a := max(uint16(trackMask.Pix[i])*35/100, uint16(solidMask.Pix[i]), uint16(mark.Pix[i]))
 		out.Pix[i*4+0] = uint8(r >> 8)
 		out.Pix[i*4+1] = uint8(g >> 8)
 		out.Pix[i*4+2] = uint8(b >> 8)
@@ -127,20 +139,6 @@ func arc(r *vector.Rasterizer, cx, cy, outer, inner, start, sweep float64) {
 		x, y = point(inner, start+sweep*float64(i)/float64(n))
 		r.LineTo(x, y)
 	}
-	r.ClosePath()
-}
-
-func arrowShape(r *vector.Rasterizer, cx, cy float64) {
-	f := func(v float64) float32 { return float32(v) }
-	const w = 1.3 // half the shaft's width
-	r.MoveTo(f(cx-w), f(cy-7))
-	r.LineTo(f(cx+w), f(cy-7))
-	r.LineTo(f(cx+w), f(cy+1.5))
-	r.LineTo(f(cx-w), f(cy+1.5))
-	r.ClosePath()
-	r.MoveTo(f(cx-5.5), f(cy-0.5))
-	r.LineTo(f(cx+5.5), f(cy-0.5))
-	r.LineTo(f(cx), f(cy+6.5))
 	r.ClosePath()
 }
 
