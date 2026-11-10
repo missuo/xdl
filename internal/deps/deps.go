@@ -1,6 +1,6 @@
-// Package deps describes the external tools XDL uses: xtractor, which
-// extracts timelines, FFmpeg, which converts GIFs, and ExifTool, which embeds
-// metadata.
+// Package deps describes the external tools XDL can use: FFmpeg, which
+// converts GIFs, and ExifTool, which embeds metadata. Both are optional;
+// XDL reads timelines from X itself.
 package deps
 
 import (
@@ -12,7 +12,7 @@ import (
 
 // Dep is one external tool.
 type Dep struct {
-	Name        string // xtractor, ffmpeg, exiftool
+	Name        string // ffmpeg, exiftool
 	Title       string
 	Description string
 	Required    bool
@@ -39,18 +39,8 @@ func (s Status) UpToDate() bool {
 		strings.TrimPrefix(s.InstalledVersion, "v") == strings.TrimPrefix(s.LatestVersion, "v"))
 }
 
-// All lists the tools, required first.
+// All lists the tools.
 var All = []Dep{
-	{
-		Name: "xtractor", Title: "xtractor", Required: true,
-		Description: "Extracts timelines from X (required)",
-		Installed:   backend.IsExtractorInstalled,
-		Download:    backend.DownloadExtractor,
-		status: func() Status {
-			s := backend.GetExtractorVersionStatus()
-			return Status{Installed: s.Installed, InstalledVersion: s.InstalledVersion, LatestVersion: s.LatestVersion}
-		},
-	},
 	{
 		Name: "ffmpeg", Title: "FFmpeg",
 		Description: "Converts GIF videos to .gif",
@@ -80,5 +70,5 @@ func Find(name string) (Dep, error) {
 			return d, nil
 		}
 	}
-	return Dep{}, fmt.Errorf("unknown dependency %q (xtractor, ffmpeg or exiftool)", name)
+	return Dep{}, fmt.Errorf("unknown dependency %q (ffmpeg or exiftool)", name)
 }

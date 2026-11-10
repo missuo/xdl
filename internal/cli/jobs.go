@@ -426,7 +426,7 @@ func cmdStatus(args []string) error {
 	if st.Active != nil {
 		fmt.Printf("  now:  %s — %s\n", st.Active.Label(), st.Active.Summary())
 	}
-	fmt.Printf("  auth token: %s, xtractor: %s\n", have(st.AuthToken, "saved"), have(st.Extractor, "installed"))
+	fmt.Printf("  auth token: %s\n", have(st.AuthToken, "saved"))
 	fmt.Printf("  downloads go to %s\n", st.DownloadPath)
 	return nil
 }

@@ -46,7 +46,6 @@ async function test() {
     const where = st.kind === "serve" ? "xdl serve" : "the app";
     const warnings = [];
     if (!st.auth_token) warnings.push("no X auth token");
-    if (!st.xtractor) warnings.push("xtractor missing");
     show(`Connected to XDL ${st.version} (${where})` + (warnings.length ? ` — ${warnings.join(", ")}` : "."), warnings.length === 0);
   } catch {
     show("XDL is not reachable at " + url + ".", false);

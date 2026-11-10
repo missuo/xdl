@@ -130,9 +130,6 @@ func (e *Engine) pipeline(j *job) error {
 
 // fetch pages through the timeline and saves it to the library.
 func (e *Engine) fetch(j *job, cfg settings.Settings) (*savedTimeline, error) {
-	if !backend.IsExtractorInstalled() {
-		return nil, errors.New("xtractor is not installed — install it from Dependencies (or `xdl deps install xtractor`)")
-	}
 	token, err := backend.GetStoredAuthToken(authTokenSlot)
 	if err != nil {
 		return nil, fmt.Errorf("reading the auth token: %w", err)
@@ -183,6 +180,7 @@ func (e *Engine) fetch(j *job, cfg settings.Settings) (*savedTimeline, error) {
 			IncludeText:   cfg.IncludeText,
 			VideoQuality:  cfg.VideoQuality,
 			ImageSize:     cfg.ImageSize,
+			Proxy:         cfg.Proxy,
 		}, time.Duration(cfg.FetchTimeout)*time.Second)
 		if err != nil {
 			if errors.Is(err, context.Canceled) && len(timeline) == 0 {
@@ -281,32 +279,15 @@ func (e *Engine) fetch(j *job, cfg settings.Settings) (*savedTimeline, error) {
 	return result, nil
 }
 
-// extractPage runs one xtractor call, which takes no context: cancelling or
-// timing out kills the extractor process.
+// extractPage fetches one page, giving up after timeout.
 func (e *Engine) extractPage(ctx context.Context, req backend.TimelineRequest, timeout time.Duration) (*backend.TwitterResponse, error) {
-	type result struct {
-		resp *backend.TwitterResponse
-		err  error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		resp, err := backend.ExtractTimeline(req)
-		ch <- result{resp, err}
-	}()
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case res := <-ch:
-		return res.resp, res.err
-	case <-ctx.Done():
-		backend.KillAllExtractorProcesses()
-		<-ch
-		return nil, ctx.Err()
-	case <-timer.C:
-		backend.KillAllExtractorProcesses()
-		<-ch
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	resp, err := backend.ExtractTimeline(ctx, req)
+	if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return nil, fmt.Errorf("page %d timed out after %s", req.Page, timeout)
 	}
+	return resp, err
 }
 
 func (e *Engine) setTimeline(j *job, t *savedTimeline, newCount int, incomplete bool) {

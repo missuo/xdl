@@ -272,7 +272,7 @@ func cmdDeps(args []string) error {
 		return tw.Flush()
 	case "install", "update":
 		if len(args) == 0 {
-			return errors.New("usage: xdl deps install <xtractor|ffmpeg|exiftool|all>")
+			return errors.New("usage: xdl deps install <ffmpeg|exiftool|all>")
 		}
 		var list []deps.Dep
 		if args[0] == "all" {
@@ -331,7 +331,7 @@ func cmpOr(s, def string) string {
 
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	installDeps := fs.Bool("install-deps", false, "install xtractor first when it is missing (for containers)")
+	_ = fs.Bool("install-deps", false, "accepted for older setups; XDL needs nothing installed")
 	addr := fs.String("addr", envOr("XDL_API_ADDR", server.DefaultAddr), "listen address; another than 127.0.0.1 requires the API token on every request (the extension expects "+server.DefaultAddr+")")
 	if _, err := parse(fs, args); err != nil {
 		return err
@@ -339,12 +339,6 @@ func cmdServe(args []string) error {
 	logbuf.Default.SetOutput(os.Stderr)
 	if err := initDB(); err != nil {
 		return err
-	}
-	if *installDeps && !backend.IsExtractorInstalled() {
-		d, _ := deps.Find("xtractor")
-		if err := installDep(d); err != nil {
-			return fmt.Errorf("installing xtractor: %w", err)
-		}
 	}
 	ctx, cancel := interruptible()
 	defer cancel()
@@ -363,11 +357,7 @@ func cmdServe(args []string) error {
 	if token, _ := backend.GetStoredAuthToken("public"); token == "" {
 		fmt.Fprintln(os.Stderr, "warning: no X auth token — set XDL_AUTH_TOKEN or run `xdl token set`")
 	}
-	if !backend.IsExtractorInstalled() {
-		fmt.Fprintln(os.Stderr, "warning: xtractor is not installed — run `xdl deps install xtractor`")
-	}
 	err := srv.Serve(ctx)
-	backend.KillAllExtractorProcesses()
 	backend.CloseDB()
 	if errors.Is(err, context.Canceled) {
 		return nil

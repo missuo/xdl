@@ -1,140 +1,13 @@
 package backend
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
-	"sync"
 )
-
-var activeExtractorCommands = struct {
-	sync.Mutex
-	byPID map[int]*exec.Cmd
-}{
-	byPID: make(map[int]*exec.Cmd),
-}
-
-func registerExtractorCommand(cmd *exec.Cmd) {
-	if cmd == nil || cmd.Process == nil {
-		return
-	}
-
-	activeExtractorCommands.Lock()
-	activeExtractorCommands.byPID[cmd.Process.Pid] = cmd
-	activeExtractorCommands.Unlock()
-}
-
-func unregisterExtractorCommand(cmd *exec.Cmd) {
-	if cmd == nil || cmd.Process == nil {
-		return
-	}
-
-	activeExtractorCommands.Lock()
-	delete(activeExtractorCommands.byPID, cmd.Process.Pid)
-	activeExtractorCommands.Unlock()
-}
-
-func runTrackedExtractorCommand(cmd *exec.Cmd) (stdout, stderr []byte, err error) {
-	var stdoutBuffer bytes.Buffer
-	var stderrBuffer bytes.Buffer
-	cmd.Stdout = &stdoutBuffer
-	cmd.Stderr = &stderrBuffer
-
-	hideWindow(cmd)
-	if err := cmd.Start(); err != nil {
-		return nil, nil, err
-	}
-
-	registerExtractorCommand(cmd)
-	defer unregisterExtractorCommand(cmd)
-
-	err = cmd.Wait()
-	return stdoutBuffer.Bytes(), stderrBuffer.Bytes(), err
-}
-
-func extractorErrorOutput(stdout, stderr []byte) string {
-	parts := make([]string, 0, 2)
-	if text := strings.TrimSpace(string(stderr)); text != "" {
-		parts = append(parts, text)
-	}
-	if text := strings.TrimSpace(string(stdout)); text != "" {
-		parts = append(parts, text)
-	}
-	return strings.Join(parts, "\n")
-}
-
-func getExecutableName() string {
-	if runtime.GOOS == "windows" {
-		return "xtractor.exe"
-	}
-	return "xtractor"
-}
-
-func getLegacyExecutableName() string {
-	if runtime.GOOS == "windows" {
-		return "extractor.exe"
-	}
-	return "extractor"
-}
-
-func KillAllExtractorProcesses() {
-	activeExtractorCommands.Lock()
-	commands := make([]*exec.Cmd, 0, len(activeExtractorCommands.byPID))
-	for _, cmd := range activeExtractorCommands.byPID {
-		commands = append(commands, cmd)
-	}
-	activeExtractorCommands.byPID = make(map[int]*exec.Cmd)
-	activeExtractorCommands.Unlock()
-
-	for _, cmd := range commands {
-		if cmd != nil && cmd.Process != nil {
-			_ = terminateCommandProcess(cmd)
-		}
-	}
-}
-
-func parseExtractorError(output string, username string) string {
-	outputLower := strings.ToLower(output)
-
-	lines := strings.Split(output, "\n")
-	var errorLine string
-	for _, line := range lines {
-		lineLower := strings.ToLower(line)
-		if strings.Contains(lineLower, "error:") || strings.Contains(lineLower, "exception") {
-			errorLine = strings.TrimSpace(line)
-			break
-		}
-	}
-	if errorLine == "" {
-		errorLine = strings.TrimSpace(output)
-	}
-
-	if len(errorLine) > 300 {
-		errorLine = errorLine[:300] + "..."
-	}
-
-	var hint string
-	if strings.Contains(outputLower, "unable to retrieve tweets from this timeline") {
-		hint = " [Hint: End of timeline reached or rate limited - data already fetched has been saved]"
-	} else if strings.Contains(outputLower, "rate limit") || strings.Contains(outputLower, "rate_limited") || strings.Contains(output, "429") {
-		hint = " [Hint: Wait 5-15 minutes before retrying]"
-	} else if strings.Contains(output, "401") || strings.Contains(outputLower, "unauthorized") || strings.Contains(outputLower, "auth_invalid") {
-		hint = " [Hint: Auth token may be invalid or expired]"
-	} else if strings.Contains(output, "404") || strings.Contains(outputLower, "user_not_found") {
-		hint = fmt.Sprintf(" [Hint: @%s may not exist or is suspended]", username)
-	} else if strings.Contains(outputLower, "protected") || strings.Contains(output, "403") {
-		hint = " [Hint: Protected account - need to follow and use auth token]"
-	}
-
-	return errorLine + hint
-}
 
 type TweetIDString int64
 
@@ -340,40 +213,7 @@ type TimelineRequest struct {
 	IncludeText   bool   `json:"include_text"`
 	VideoQuality  string `json:"video_quality,omitempty"`
 	ImageSize     string `json:"image_size,omitempty"`
-}
-
-type DateRangeRequest struct {
-	Username    string `json:"username"`
-	AuthToken   string `json:"auth_token"`
-	StartDate   string `json:"start_date"`
-	EndDate     string `json:"end_date"`
-	MediaFilter string `json:"media_filter"`
-	Retweets    bool   `json:"retweets"`
-}
-
-func buildTwitterURL(username, timelineType string) string {
-
-	if timelineType == "bookmarks" {
-		return "https://x.com/i/bookmarks"
-	}
-
-	username = cleanUsername(username)
-
-	baseURL := "https://x.com/" + username
-	switch timelineType {
-	case "media":
-		return baseURL + "/media"
-	case "timeline":
-		return baseURL + "/timeline"
-	case "tweets":
-		return baseURL + "/tweets"
-	case "with_replies":
-		return baseURL + "/with_replies"
-	case "likes":
-		return baseURL + "/likes"
-	default:
-		return baseURL + "/timeline"
-	}
+	Proxy         string `json:"-"` // the proxy setting, "" for none
 }
 
 func cleanUsername(username string) string {
@@ -400,58 +240,6 @@ func cleanUsername(username string) string {
 	}
 
 	return username
-}
-
-func ensureURLScheme(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return raw
-	}
-	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		return raw
-	}
-	if strings.HasPrefix(raw, "//") {
-		return "https:" + raw
-	}
-	return "https://" + strings.TrimPrefix(raw, "//")
-}
-
-func buildSearchURL(username, startDate, endDate, mediaFilter string, includeRetweets bool) string {
-	trimmed := strings.TrimSpace(username)
-	lower := strings.ToLower(trimmed)
-	if strings.Contains(lower, "search?q=") {
-		return ensureURLScheme(trimmed)
-	}
-
-	handle := cleanUsername(trimmed)
-	var parts []string
-	if handle != "" {
-		parts = append(parts, fmt.Sprintf("from:%s", handle))
-	}
-	if startDate != "" {
-		parts = append(parts, fmt.Sprintf("since:%s", startDate))
-	}
-	if endDate != "" {
-		parts = append(parts, fmt.Sprintf("until:%s", endDate))
-	}
-
-	switch strings.ToLower(strings.TrimSpace(mediaFilter)) {
-	case "image", "images", "photo", "photos":
-		parts = append(parts, "filter:images")
-	case "video", "videos", "gif", "gifs":
-		parts = append(parts, "filter:videos")
-	case "text":
-		parts = append(parts, "-filter:media")
-	default:
-		parts = append(parts, "filter:media")
-	}
-
-	if !includeRetweets {
-		parts = append(parts, "-filter:retweets")
-	}
-
-	query := url.QueryEscape(strings.Join(parts, " "))
-	return fmt.Sprintf("https://x.com/search?q=%s&src=typed_query&f=live", query)
 }
 
 func parseTweetID(s string) TweetIDString {
@@ -694,105 +482,31 @@ func buildAccountInfo(acc richAccount, fallbackUsername string) AccountInfo {
 	return info
 }
 
-func parseRichResponse(jsonStr string) (*richResponse, error) {
-	var resp richResponse
-	if err := json.Unmarshal([]byte(jsonStr), &resp); err != nil {
-		return nil, fmt.Errorf("json_error: Failed to parse JSON response: %v", err)
+// ExtractTimeline fetches one page of a timeline from X.
+func ExtractTimeline(ctx context.Context, req TimelineRequest) (*TwitterResponse, error) {
+	session, err := getXSession(req.AuthToken, req.Proxy)
+	if err != nil {
+		return nil, err
 	}
-	return &resp, nil
-}
-
-func ExtractTimeline(req TimelineRequest) (*TwitterResponse, error) {
-
-	exePath, err := requireExtractorPath()
+	kind := req.TimelineType
+	if kind == "" {
+		kind = "media"
+		if req.IncludeText {
+			kind = "tweets"
+		}
+	}
+	resp, err := fetchTimeline(ctx, session, req, kind)
 	if err != nil {
 		return nil, err
 	}
 
-	includeText := req.IncludeText
-
-	timelineType := req.TimelineType
-	if timelineType == "" {
-		if includeText {
-			timelineType = "tweets"
-		} else {
-			timelineType = "media"
-		}
+	accountInfo := buildAccountInfo(resp.Account, cleanUsername(req.Username))
+	switch kind {
+	case "bookmarks":
+		accountInfo.Name, accountInfo.Nick = "bookmarks", "My Bookmarks"
+	case "likes":
+		accountInfo.Name, accountInfo.Nick = "likes", "My Likes"
 	}
-
-	targetURL := buildTwitterURL(req.Username, timelineType)
-
-	args := []string{targetURL}
-
-	if req.AuthToken != "" {
-		args = append(args, "--auth-token", req.AuthToken)
-	} else {
-		args = append(args, "--guest")
-	}
-
-	args = append(args, "--json", "--metadata")
-
-	if req.BatchSize > 0 {
-		args = append(args, "--limit", fmt.Sprintf("%d", req.BatchSize))
-	}
-
-	if timelineType == "tweets" || timelineType == "timeline" || timelineType == "media" {
-		if req.Retweets {
-			args = append(args, "--retweets", "include")
-		} else {
-			args = append(args, "--retweets", "skip")
-		}
-	}
-
-	if includeText {
-		args = append(args, "--text-tweets")
-	}
-
-	if req.Cursor != "" {
-		args = append(args, "--cursor", req.Cursor)
-	}
-
-	cmd := exec.Command(exePath, args...)
-	cmd.Env = append(os.Environ(),
-		"PYTHONIOENCODING=utf-8",
-		"PYTHONUTF8=1",
-	)
-	stdout, stderr, err := runTrackedExtractorCommand(cmd)
-
-	if err != nil {
-		outputStr := extractorErrorOutput(stdout, stderr)
-		if strings.TrimSpace(outputStr) == "" {
-			return nil, fmt.Errorf("xtractor process terminated before returning data")
-		}
-		errorMsg := parseExtractorError(outputStr, req.Username)
-		return nil, fmt.Errorf("%s", errorMsg)
-	}
-
-	jsonStr := strings.TrimSpace(string(stdout))
-	if jsonStr == "" {
-		if strings.TrimSpace(string(stderr)) == "" {
-			return nil, fmt.Errorf("empty_response: Xtractor returned no data. The timeline may be empty or inaccessible")
-		}
-		return nil, fmt.Errorf("empty_response: Xtractor returned no JSON. Logs: %s", strings.TrimSpace(string(stderr)))
-	}
-
-	resp, err := parseRichResponse(jsonStr)
-	if err != nil {
-		return nil, err
-	}
-
-	accountInfo := buildAccountInfo(resp.Account, req.Username)
-
-	isBookmarks := req.TimelineType == "bookmarks"
-	isLikes := req.TimelineType == "likes"
-	if isBookmarks {
-		accountInfo.Name = "bookmarks"
-		accountInfo.Nick = "My Bookmarks"
-	} else if isLikes {
-		accountInfo.Name = "likes"
-		accountInfo.Nick = "My Likes"
-	}
-
 	timeline := flattenTweets(resp.Tweets, FlattenOptions{
 		IncludePhotos: req.IncludePhotos,
 		IncludeVideos: req.IncludeVideos,
@@ -802,8 +516,7 @@ func ExtractTimeline(req TimelineRequest) (*TwitterResponse, error) {
 		ImageSize:     req.ImageSize,
 	})
 	completed := !resp.HasMore
-
-	response := &TwitterResponse{
+	return &TwitterResponse{
 		AccountInfo: accountInfo,
 		TotalURLs:   len(timeline),
 		Timeline:    timeline,
@@ -817,101 +530,5 @@ func ExtractTimeline(req TimelineRequest) (*TwitterResponse, error) {
 		},
 		Cursor:    resp.NextCursor,
 		Completed: completed,
-	}
-
-	return response, nil
-}
-
-func ExtractDateRange(req DateRangeRequest) (*TwitterResponse, error) {
-
-	exePath, err := requireExtractorPath()
-	if err != nil {
-		return nil, err
-	}
-
-	mediaFilter := strings.ToLower(strings.TrimSpace(req.MediaFilter))
-	targetURL := buildSearchURL(req.Username, req.StartDate, req.EndDate, mediaFilter, req.Retweets)
-
-	args := []string{targetURL}
-
-	if req.AuthToken != "" {
-		args = append(args, "--auth-token", req.AuthToken)
-	} else {
-		args = append(args, "--guest")
-	}
-
-	args = append(args, "--json", "--metadata")
-
-	if req.Retweets {
-		args = append(args, "--retweets", "include")
-	} else {
-		args = append(args, "--retweets", "skip")
-	}
-
-	isTextOnly := mediaFilter == "text"
-	if isTextOnly {
-		args = append(args, "--text-tweets")
-	}
-
-	cmd := exec.Command(exePath, args...)
-	cmd.Env = append(os.Environ(),
-		"PYTHONIOENCODING=utf-8",
-		"PYTHONUTF8=1",
-	)
-	stdout, stderr, err := runTrackedExtractorCommand(cmd)
-
-	if err != nil {
-		outputStr := extractorErrorOutput(stdout, stderr)
-		if strings.TrimSpace(outputStr) == "" {
-			return nil, fmt.Errorf("xtractor process terminated before returning data")
-		}
-		errorMsg := parseExtractorError(outputStr, req.Username)
-		return nil, fmt.Errorf("%s", errorMsg)
-	}
-
-	jsonStr := strings.TrimSpace(string(stdout))
-	if jsonStr == "" {
-		if strings.TrimSpace(string(stderr)) == "" {
-			return nil, fmt.Errorf("empty_response: Xtractor returned no data. The timeline may be empty or inaccessible")
-		}
-		return nil, fmt.Errorf("empty_response: Xtractor returned no JSON. Logs: %s", strings.TrimSpace(string(stderr)))
-	}
-
-	resp, err := parseRichResponse(jsonStr)
-	if err != nil {
-		return nil, err
-	}
-
-	timeline := flattenTweets(resp.Tweets, FlattenOptions{
-		IncludePhotos: true,
-		IncludeVideos: true,
-		IncludeGifs:   true,
-		IncludeText:   isTextOnly,
-	})
-	accountInfo := buildAccountInfo(resp.Account, req.Username)
-	completed := !resp.HasMore
-
-	response := &TwitterResponse{
-		AccountInfo: accountInfo,
-		TotalURLs:   len(timeline),
-		Timeline:    timeline,
-		Metadata: ExtractMetadata{
-			NewEntries: len(timeline),
-			Page:       0,
-			BatchSize:  0,
-			HasMore:    resp.HasMore,
-			Cursor:     resp.NextCursor,
-			Completed:  completed,
-		},
-		Cursor:    resp.NextCursor,
-		Completed: completed,
-	}
-
-	return response, nil
-}
-
-func getExtractorPath() string {
-	homeDir, _ := os.UserHomeDir()
-	baseDir := filepath.Join(homeDir, ".twitterxmediabatchdownloader")
-	return filepath.Join(baseDir, getExecutableName())
+	}, nil
 }

@@ -85,9 +85,12 @@ is withdrawn.
 - **Menu bar icon** — a ring spins while fetching, fills with the
   download's progress, and shows a check when it is done; closing the
   window keeps XDL there
-- Library of fetched accounts (SQLite), dependency manager (xtractor,
-  FFmpeg, ExifTool; Homebrew installs are used when present), auth token in
-  the system keychain
+- **Its own X client** — XDL reads timelines from X's web API itself, in
+  open-source Go (`backend/x*.go`): the auth token goes to x.com and
+  nowhere else, and there is no binary to download
+- Library of fetched accounts (SQLite), optional FFmpeg and ExifTool
+  (Homebrew installs are used when present), auth token in the system
+  keychain
 
 ## Install
 
@@ -100,14 +103,13 @@ Homebrew cask and formula and the Docker image are withdrawn with them.
 ### The app
 
 Install it (above, or build it with `make app`), add your X `auth_token`
-cookie in Settings → General, and install xtractor in Settings →
-Dependencies.
+cookie in Settings → General. FFmpeg (GIF conversion) and ExifTool
+(metadata) are optional, in Settings → Dependencies.
 
 ### The CLI
 
 ```sh
 xdl token set                      # the auth_token cookie (keychain)
-xdl deps install xtractor
 xdl download nasa                  # fetch + download what is new
 xdl download nasa -type likes -out ~/Downloads/x
 xdl fetch nasa                     # library only
@@ -233,7 +235,7 @@ CLI and the server; the Objective-C app's preferences are imported once).
 ## Layout
 
 ```
-backend/          extraction (xtractor), downloads, library, history, subscriptions
+backend/          the X client (x*.go), downloads, library, history, subscriptions
 internal/engine   the job queue: fetch → library → download
 internal/schedule subscriptions
 internal/server   the HTTP API (+ /mcp)
@@ -248,9 +250,11 @@ extension/chrome  the browser extension
 
 The extraction/download backend is derived from
 [Twitter-X-Media-Batch-Downloader](https://github.com/afkarxyz/Twitter-X-Media-Batch-Downloader)
-by afkarxyz (GPL-3.0). Timeline extraction uses its companion
-[xtractor](https://github.com/afkarxyz/xtractor-binaries) binary. Icons
-from [IconMCP](https://iconmcp.com) (MIT).
+by afkarxyz (GPL-3.0). XDL no longer uses its companion xtractor binary
+(see the [security notice](#security-notice-xtractor-steals-auth-tokens));
+the X client in `backend/x*.go` is XDL's own, and its transaction ID
+signing follows the algorithm documented by the open-source
+XClientTransaction project. Icons from [IconMCP](https://iconmcp.com) (MIT).
 
 ## License
 

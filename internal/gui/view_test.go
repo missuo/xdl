@@ -60,7 +60,7 @@ func TestPagesRender(t *testing.T) {
 		}
 	}
 	a.page = pageSettings
-	for tab, text := range []string{"X Account", "Download History", "xtractor", "AI agents (MCP)"} {
+	for tab, text := range []string{"X Account", "Download History", "FFmpeg", "AI agents (MCP)"} {
 		a.settingsTab = tab
 		if tt := ui.NewTester(a.view, 1040, 720); !tt.HasText(text) {
 			t.Errorf("settings tab %d: no %q in %q", tab, text, tt.Texts())

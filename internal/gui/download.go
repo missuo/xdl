@@ -284,7 +284,7 @@ func itemStatus(c *ui.Context, status string) {
 	}
 }
 
-// shortDate writes the extractor's timestamps (Twitter's Ruby dates, or
+// shortDate writes X's timestamps (Twitter's Ruby dates, or
 // RFC 3339) as local "2026-01-02 15:04".
 func shortDate(s string) string {
 	for _, layout := range []string{time.RubyDate, time.RFC3339, "2006-01-02T15:04:05", "2006-01-02 15:04:05"} {

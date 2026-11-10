@@ -1,5 +1,5 @@
-// Package engine runs XDL's jobs: fetching an account's timeline with
-// xtractor, saving it to the library and downloading its media. The GUI, the
+// Package engine runs XDL's jobs: fetching an account's timeline from X,
+// saving it to the library and downloading its media. The GUI, the
 // CLI and the HTTP API (and so the browser extension) all submit jobs to the
 // same queue, which runs one job at a time.
 package engine

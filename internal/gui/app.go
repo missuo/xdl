@@ -120,7 +120,6 @@ func Run() error {
 	if err := backend.InitDB(); err != nil {
 		log.Printf("library: %v", err)
 	}
-	backend.KillAllExtractorProcesses()
 
 	store := settings.Open()
 	a := &App{
@@ -178,7 +177,6 @@ func Run() error {
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { a.quitting = true })
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		stop()
-		backend.KillAllExtractorProcesses()
 		if a.tray != nil {
 			a.tray.Destroy()
 		}

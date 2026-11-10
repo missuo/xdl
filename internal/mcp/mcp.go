@@ -185,7 +185,7 @@ var timelineProp = map[string]any{
 
 func init() {
 	register("xdl_status", "XDL status",
-		"Whether XDL is ready (auth token saved, xtractor installed), where it downloads to, and what it is doing.",
+		"Whether XDL is ready (auth token saved), where it downloads to, and what it is doing.",
 		map[string]any{}, nil, true,
 		func(ctx context.Context, s *Server, _ json.RawMessage) (any, error) {
 			queued, running := s.Eng.Counts()
@@ -193,8 +193,8 @@ func init() {
 			dir := s.Eng.Settings().Get().DownloadDir()
 			out := map[string]any{
 				"version": s.Version, "queued": queued, "running": running,
-				"auth_token_saved": token != "", "xtractor_installed": backend.IsExtractorInstalled(),
-				"download_dir": dir,
+				"auth_token_saved": token != "",
+				"download_dir":     dir,
 			}
 			if j, ok := s.Eng.Active(); ok {
 				out["active_job"] = j

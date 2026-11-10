@@ -25,7 +25,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -ldflags "-s -w -X github.com/missuo/xdl/internal/version.Version=${VERSION}" \
       -o /out/xdl ./cmd/xdl
 
-# xtractor is a glibc binary: Debian, not Alpine.
 FROM debian:trixie-slim
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="XDL" \
@@ -41,8 +40,8 @@ RUN apt-get update \
  && chown xdl:xdl /data /downloads
 COPY --from=build /out/xdl /usr/local/bin/xdl
 
-# /data holds the library, the download history, subscriptions, settings
-# and xtractor (installed on first start); /downloads the media.
+# /data holds the library, the download history, subscriptions and
+# settings; /downloads the media.
 ENV HOME=/data \
     XDG_CONFIG_HOME=/data/config \
     XDL_DOWNLOAD_DIR=/downloads \
@@ -52,4 +51,4 @@ VOLUME ["/data", "/downloads"]
 EXPOSE 47333
 HEALTHCHECK --interval=1m --timeout=5s CMD ["xdl", "status"]
 ENTRYPOINT ["xdl"]
-CMD ["serve", "-install-deps"]
+CMD ["serve"]

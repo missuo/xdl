@@ -260,7 +260,6 @@ type Status struct {
 	Running      int         `json:"running"`
 	Active       *engine.Job `json:"active,omitempty"`
 	AuthToken    bool        `json:"auth_token"`
-	Extractor    bool        `json:"xtractor"`
 	DownloadPath string      `json:"download_path"`
 }
 
@@ -269,7 +268,6 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	st := Status{
 		App: "XDL", Version: s.version, Kind: s.kind, PID: os.Getpid(),
 		Queued: queued, Running: running,
-		Extractor: backend.IsExtractorInstalled(),
 	}
 	if j, ok := s.eng.Active(); ok {
 		st.Active = &j

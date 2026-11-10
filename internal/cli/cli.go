@@ -42,7 +42,7 @@ func init() {
 		{"history", "[count|clear]", "Show or clear the download history that skips media downloaded before", cmdHistory},
 		{"token", "[set|show|clear]", "Manage the X auth_token (kept in the Keychain)", cmdToken},
 		{"config", "[list|get|set|path]", "Show or change settings", cmdConfig},
-		{"deps", "[status|install <name|all>]", "Check or install xtractor, FFmpeg and ExifTool", cmdDeps},
+		{"deps", "[status|install <name|all>]", "Check or install FFmpeg and ExifTool", cmdDeps},
 		{"mcp", "", "Serve MCP over stdio, for AI agents (`claude mcp add xdl -- xdl mcp`)", cmdMCP},
 		{"serve", "[-addr host:port]", "Run the API and job queue without the GUI", cmdServe},
 		{"status", "", "Show whether XDL is running and what it is doing", cmdStatus},
