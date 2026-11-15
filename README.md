@@ -1,10 +1,40 @@
-# XDL
+<p align="center">
+  <img src="design/readme-banner.png" alt="XDL" width="100%">
+</p>
 
-Batch downloader for X/Twitter media timelines, written in Go: a desktop
-app for macOS and Windows built with [MyGo](https://github.com/egoist/mygo)
-(native UI, menu bar icon), a CLI, a headless server for Linux and Docker,
-a local API the Chrome extension sends jobs to, and an MCP server for AI
-agents.
+<h1 align="center">XDL</h1>
+
+<p align="center">
+  <b>Batch downloader for X/Twitter media: photos, videos and GIFs from whole timelines.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/missuo/xdl/releases/latest"><img src="https://img.shields.io/github/v/release/missuo/xdl?style=flat-square&label=release&color=111111" alt="Latest release"></a>
+  <a href="https://github.com/missuo/xdl/releases"><img src="https://img.shields.io/github/downloads/missuo/xdl/total?style=flat-square&color=111111" alt="Downloads"></a>
+  <a href="https://github.com/missuo/xdl/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/missuo/xdl/release.yml?style=flat-square&label=build" alt="Build"></a>
+  <a href="https://github.com/missuo/xdl/stargazers"><img src="https://img.shields.io/github/stars/missuo/xdl?style=flat-square&color=111111" alt="Stars"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/missuo/xdl?style=flat-square&color=111111" alt="License"></a>
+  <br>
+  <img src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square&logo=apple&logoColor=white" alt="macOS 13+">
+  <img src="https://img.shields.io/badge/Windows-10%2B-111111?style=flat-square" alt="Windows 10+">
+  <img src="https://img.shields.io/badge/Linux-amd64%20%7C%20arm64-111111?style=flat-square&logo=linux&logoColor=white" alt="Linux">
+  <a href="#homebrew"><img src="https://img.shields.io/badge/Homebrew-owo--network%2Fbrew-111111?style=flat-square&logo=homebrew&logoColor=white" alt="Homebrew"></a>
+  <a href="#headless-linux-and-docker"><img src="https://img.shields.io/badge/Docker-ghcr.io%2Fmissuo%2Fxdl-111111?style=flat-square&logo=docker&logoColor=white" alt="Docker"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/missuo/xdl?style=flat-square&logo=go&logoColor=white&color=111111" alt="Go version">
+</p>
+
+<p align="center">
+  <a href="https://github.com/missuo/xdl/releases/latest">Download</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#use">Use</a> ·
+  <a href="#ai-agents-mcp">MCP</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+XDL is written in Go: a desktop app for macOS, Windows and Linux built with
+[MyGo](https://github.com/egoist/mygo) (native UI, menu bar icon), a CLI, a
+headless server for Linux and Docker, a local API the Chrome extension sends
+jobs to, and an MCP server for AI agents.
 
 > [!CAUTION]
 > **Security notice (2026-11-10): XDL 2.0.0 and earlier ran xtractor, which
